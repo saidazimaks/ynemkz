@@ -81,6 +81,31 @@ export function useCachedApi<T>(path: string): T | null | undefined {
   return data;
 }
 
+/** Плавный набег числа (ease-out, ~0.9 c) — для суммы «Вы сэкономили». */
+export function useCountUp(target: number, durationMs = 900): number {
+  const [value, setValue] = useState(0);
+  const fromRef = useRef(0);
+
+  useEffect(() => {
+    const from = fromRef.current;
+    if (from === target) return;
+    const start = performance.now();
+    let raf = 0;
+    const step = (now: number) => {
+      const p = Math.min((now - start) / durationMs, 1);
+      const eased = 1 - Math.pow(1 - p, 3);
+      const current = Math.round(from + (target - from) * eased);
+      setValue(current);
+      if (p < 1) raf = requestAnimationFrame(step);
+      else fromRef.current = target;
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [target, durationMs]);
+
+  return value;
+}
+
 /** Мерцающая заглушка страницы (fallback для lazy-роутов и первой загрузки). */
 export function PageSkeleton() {
   return (

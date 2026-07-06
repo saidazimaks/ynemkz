@@ -33,6 +33,14 @@ button, input, textarea, select {
   font-family: var(--tgui--font-family);
 }
 
+/* Брендовые CTA: filled-кнопки и активные состояния tgui — янтарный Ynem.
+   Токены переопределяем на #root (специфичность id > классов темы tgui). */
+#root {
+  --tgui--button_color: var(--vg-accent);
+  --tgui--button_text_color: #ffffff;
+  --tgui--link_color: var(--vg-accent);
+}
+
 .vg-display {
   font-family: var(--vg-font-display);
   letter-spacing: -0.02em;
@@ -216,6 +224,8 @@ button, input, textarea, select {
   margin-bottom: 10px;
   border-radius: var(--vg-radius);
   background: var(--tgui--section_bg_color, var(--tgui--secondary_bg_color, #f4f4f7));
+  /* тонкая граница — отделяет карточку от фона в светлой теме */
+  border: 1px solid var(--tgui--outline, rgba(0, 0, 0, 0.06));
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.03);
   cursor: pointer;
   transition: transform 0.13s ease;
@@ -513,6 +523,7 @@ button, input, textarea, select {
   border-radius: var(--vg-radius);
   padding: 14px;
   background: var(--tgui--section_bg_color, var(--tgui--secondary_bg_color, #f4f4f7));
+  border: 1px solid var(--tgui--outline, rgba(0, 0, 0, 0.06));
 }
 .vg-stat-num {
   font-family: var(--vg-font-display);
@@ -534,6 +545,7 @@ button, input, textarea, select {
   padding: 14px;
   border-radius: var(--vg-radius);
   background: var(--tgui--section_bg_color, var(--tgui--secondary_bg_color, #f4f4f7));
+  border: 1px solid var(--tgui--outline, rgba(0, 0, 0, 0.06));
 }
 .vg-bars > div {
   flex: 1;

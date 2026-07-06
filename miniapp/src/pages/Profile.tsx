@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Button, Cell, List, Placeholder, Section, Switch } from '@telegram-apps/telegram-ui';
 import { invoice, openTelegramLink } from '@telegram-apps/sdk-react';
 import { api, type Me, type Visit } from './../api';
-import { useMainButton } from './../hooks';
+import { useCountUp, useMainButton } from './../hooks';
 
 const BOT = import.meta.env.VITE_BOT_USERNAME as string | undefined;
 
@@ -16,6 +16,9 @@ export default function Profile({ me, onChange }: {
   useEffect(() => {
     api<Visit[]>('/me/visits').then(setVisits).catch(() => {});
   }, []);
+
+  // Набегающая сумма — эмоциональный центр экрана
+  const savedAnimated = useCountUp(me?.saved ?? 0);
 
   // Главное действие экрана — системная кнопка Telegram
   const canPay = !!me && !me.subscription.active && !me.subscription.pending;
@@ -75,7 +78,7 @@ export default function Profile({ me, onChange }: {
       <div className="vg-save-card">
         <div className="vg-save-label">Вы сэкономили</div>
         <div className="vg-save-sum vg-display">
-          {me.saved.toLocaleString('ru-RU')} <small>₸</small>
+          {savedAnimated.toLocaleString('ru-RU')} <small>₸</small>
         </div>
         <div className="vg-save-meta">
           {me.visits} визит{me.visits % 10 === 1 && me.visits % 100 !== 11 ? '' : me.visits % 10 >= 2 && me.visits % 10 <= 4 && (me.visits % 100 < 10 || me.visits % 100 >= 20) ? 'а' : 'ов'} по клубной скидке

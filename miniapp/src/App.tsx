@@ -4,6 +4,7 @@ import { backButton, retrieveLaunchParams } from '@telegram-apps/sdk-react';
 import { Tabbar } from '@telegram-apps/telegram-ui';
 import { api, readCache, writeCache, type Me } from './api';
 import { PageSkeleton } from './hooks';
+import { ChartIcon, GearIcon, MapPinIcon, TagIcon, UserIcon } from './icons';
 import Home from './pages/Home';
 import Activate from './pages/Activate';
 import Profile from './pages/Profile';
@@ -54,12 +55,12 @@ function Nav({ role }: { role: Me['role'] | null }) {
   const navigate = useNavigate();
   const tabs = useMemo(() => {
     const base = [
-      { id: '/', text: 'Скидки' },
-      { id: '/map', text: 'Карта' },
-      { id: '/profile', text: 'Профиль' },
+      { id: '/', text: 'Скидки', icon: <TagIcon /> },
+      { id: '/map', text: 'Карта', icon: <MapPinIcon /> },
+      { id: '/profile', text: 'Профиль', icon: <UserIcon /> },
     ];
-    if (role === 'partner') base.push({ id: '/cabinet', text: 'Кабинет' });
-    if (role === 'admin') base.push({ id: '/admin', text: 'Админ' });
+    if (role === 'partner') base.push({ id: '/cabinet', text: 'Кабинет', icon: <ChartIcon /> });
+    if (role === 'admin') base.push({ id: '/admin', text: 'Админ', icon: <GearIcon /> });
     return base;
   }, [role]);
 
@@ -73,7 +74,9 @@ function Nav({ role }: { role: Me['role'] | null }) {
           text={tab.text}
           selected={location.pathname === tab.id}
           onClick={() => navigate(tab.id)}
-        />
+        >
+          {tab.icon}
+        </Tabbar.Item>
       ))}
     </Tabbar>
   );
