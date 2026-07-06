@@ -18,7 +18,7 @@ async def lifespan(app: FastAPI):
     await db.close_pool()
 
 
-app = FastAPI(title="Выгодный Город API", lifespan=lifespan)
+app = FastAPI(title="Ynem API", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

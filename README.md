@@ -1,4 +1,4 @@
-# Выгодный Город
+# Ynem
 
 Дисконт-клуб Экибастуза: Telegram Mini App (основной интерфейс) + бот + FastAPI.
 Полная архитектура — в [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -60,7 +60,7 @@ docker compose up --build -d
 2. Environment Variables:
    - `VITE_API_URL` = `https://<api>.up.railway.app` (домен api из Railway, без слэша)
    - `VITE_BOT_USERNAME` = username бота без @
-3. Deploy → прод-домен (например `https://vygodny-gorod.vercel.app`) →
+3. Deploy → прод-домен (например `https://ynemkz.vercel.app`) →
    вписать его в `MINIAPP_URL` на Railway (это CORS и web_app-кнопки) → redeploy api.
 
 Роутинг — HashRouter, rewrites не нужны; `miniapp/vercel.json` добавляет кэш ассетов.

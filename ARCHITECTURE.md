@@ -1,4 +1,4 @@
-# Выгодный Город — Архитектура системы
+# Ynem — Архитектура системы
 
 Telegram-бот + Mini App: локальный дисконт-клуб (Экибастуз). Роли: покупатель, партнёр, админ.
 
@@ -226,7 +226,7 @@ RETURNING *;
 ## 4. Структура проекта
 
 ```
-vygodny-gorod/
+ynemkz/
 ├─ bot/
 │  ├─ main.py               # entrypoint, Dispatcher
 │  ├─ config.py             # env: BOT_TOKEN, SUPABASE_URL/KEY, ADMIN_IDS, KASPI_PHONE

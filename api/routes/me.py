@@ -117,7 +117,7 @@ async def stars_invoice(user: dict = Depends(get_user)) -> dict:
     bot = _bot()
     try:
         link = await bot.create_invoice_link(
-            title="Подписка «Выгодный Город»",
+            title="Подписка Ynem",
             description="Скидки 10–15% у всех партнёров на 30 дней",
             payload=f"sub:{user['id']}",
             currency="XTR",

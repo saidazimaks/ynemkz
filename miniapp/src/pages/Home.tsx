@@ -36,7 +36,7 @@ export default function Home() {
   return (
     <div className="vg-page vg-stagger">
       <div className="vg-brand">
-        <span className="vg-brand-name">Выгодный Город</span>
+        <span className="vg-brand-name">Ynem</span>
         <span className="vg-brand-city">Экибастуз</span>
       </div>
 
