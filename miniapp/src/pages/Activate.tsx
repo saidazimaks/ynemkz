@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Button, Placeholder, Spinner, Title } from '@telegram-apps/telegram-ui';
+import { Button, Placeholder, Spinner } from '@telegram-apps/telegram-ui';
 import { hapticFeedback, openTelegramLink } from '@telegram-apps/sdk-react';
 import { api, ApiError, type Activation } from './../api';
 
@@ -14,7 +14,7 @@ type State =
 
 /** Экран активации (вариант C): знак дня, имя, ЖИВЫЕ тикающие часы, 5 минут жизни.
  *  Часы идут по серверному времени (offset от server_time) — перевод часов на
- *  телефоне не поможет. Скриншот палится по застывшим секундам. */
+ *  телефоне не поможет. Дрейфующий фон и вращающееся кольцо — анти-скриншот. */
 export default function Activate() {
   const { partnerId } = useParams();
   const navigate = useNavigate();
@@ -63,7 +63,7 @@ export default function Activate() {
     return () => clearInterval(timer);
   }, [state]);
 
-  if (state.kind === 'loading') return <Spinner size="l" />;
+  if (state.kind === 'loading') return <div className="vg-loader"><Spinner size="l" /></div>;
 
   if (state.kind === 'expired')
     return (
@@ -107,24 +107,33 @@ export default function Activate() {
   const { data } = state;
   const today = new Date(Date.now() + offsetRef.current).toLocaleDateString('ru-RU');
   const botUsername = import.meta.env.VITE_BOT_USERNAME as string | undefined;
+  const [hh = '', mm = '', ss = ''] = clock.split(':');
 
   return (
-    <div className="activation">
-      <Title level="1">{data.partner_name}</Title>
-      <div className="discount">−{data.discount}%</div>
-      <div>{data.client_name}</div>
-      <div>{today}</div>
-      <div className="sign">{data.daily_sign}</div>
-      <div className="clock">{clock}</div>
-      <div style={{ opacity: 0.6 }}>
-        Покажите этот экран кассиру.
-        {data.kind === 'daily' ? ' Скидка дня — для всех.' : ' Скидка по подписке.'}
+    <div className="vg-act">
+      <div className="vg-act-kind">
+        {data.kind === 'daily' ? 'Скидка дня · для всех' : 'Скидка по подписке'}
+      </div>
+      <div className="vg-act-partner">{data.partner_name}</div>
+      <div className="vg-act-pct">−{data.discount}%</div>
+      <div className="vg-act-client">{data.client_name} · {today}</div>
+
+      <div className="vg-act-ring">
+        <span className="vg-act-sign">{data.daily_sign}</span>
+      </div>
+
+      <div className="vg-act-clock">
+        {hh}<span className="vg-colon">:</span>{mm}<span className="vg-colon">:</span>{ss}
+      </div>
+
+      <div className="vg-act-note">
+        Покажите этот экран кассиру. Часы идут, знак дня совпадает у всех — действует 5 минут.
       </div>
       {botUsername && (
-        <Button mode="plain" size="s"
+        <button className="vg-act-link"
                 onClick={() => { try { openTelegramLink(`https://t.me/${botUsername}`); } catch { /* dev */ } }}>
           Проблемы? Напишите в бот
-        </Button>
+        </button>
       )}
     </div>
   );

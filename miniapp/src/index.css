@@ -1,33 +1,512 @@
-/* Тема приходит из Telegram (@telegram-apps/telegram-ui) — свои стили минимальны. */
+/* ============================================================
+   Выгодный Город — дизайн-система «Энергия города»
+   Экибастуз — город энергетиков: янтарный свет на графите.
+   Тема (фон/текст) адаптивная из Telegram, бренд-карточки —
+   самодостаточно тёмные, работают в обеих темах.
+   ============================================================ */
+
+:root {
+  --vg-accent: #ff8a1e;
+  --vg-accent-hot: #ff5e2b;
+  --vg-amber: #ffc069;
+  --vg-grad: linear-gradient(118deg, #ff5e2b 0%, #ff8a1e 48%, #ffc069 100%);
+  --vg-coal: #16181d;
+  --vg-coal-2: #1f232b;
+  --vg-on-coal: #f5f1ea;
+  --vg-on-coal-dim: rgba(245, 241, 234, 0.62);
+  --vg-radius: 18px;
+  --vg-font-display: 'Unbounded', 'Golos Text', sans-serif;
+  --tgui--font-family: 'Golos Text', -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
 body {
   margin: 0;
   background: var(--tgui--bg_color, #fff);
+  font-family: var(--tgui--font-family);
+  -webkit-font-smoothing: antialiased;
 }
 
-.map-full {
-  height: calc(100vh - 96px); /* минус таббар */
-  width: 100%;
+button, input, textarea, select {
+  font-family: var(--tgui--font-family);
 }
 
-/* Экран активации */
-.activation {
+.vg-display {
+  font-family: var(--vg-font-display);
+  letter-spacing: -0.02em;
+}
+
+/* --- Появление списков: каскадный fade-up ------------------- */
+
+@keyframes vg-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.vg-stagger > * {
+  opacity: 0;
+  animation: vg-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.vg-stagger > *:nth-child(1) { animation-delay: 0.03s; }
+.vg-stagger > *:nth-child(2) { animation-delay: 0.09s; }
+.vg-stagger > *:nth-child(3) { animation-delay: 0.15s; }
+.vg-stagger > *:nth-child(4) { animation-delay: 0.21s; }
+.vg-stagger > *:nth-child(5) { animation-delay: 0.27s; }
+.vg-stagger > *:nth-child(n + 6) { animation-delay: 0.33s; }
+
+/* --- Страница ------------------------------------------------ */
+
+.vg-page {
+  padding: 12px 16px 108px;
+}
+
+.vg-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 2px 14px;
+}
+.vg-brand-name {
+  font-family: var(--vg-font-display);
+  font-weight: 900;
+  font-size: 17px;
+  background: var(--vg-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.vg-brand-city {
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--tgui--hint_color, #8a8a8e);
+}
+
+.vg-h {
+  font-family: var(--vg-font-display);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--tgui--hint_color, #8a8a8e);
+  margin: 22px 2px 10px;
+}
+
+/* --- Hero: скидка дня ---------------------------------------- */
+
+.vg-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--vg-radius);
+  background:
+    radial-gradient(120% 160% at 88% -20%, rgba(255, 138, 30, 0.38), transparent 55%),
+    radial-gradient(90% 120% at -10% 110%, rgba(255, 94, 43, 0.22), transparent 60%),
+    var(--vg-coal);
+  color: var(--vg-on-coal);
+  padding: 18px 18px 16px;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+.vg-hero:active { transform: scale(0.98); }
+
+.vg-hero::after {
+  /* угольное зерно */
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+  background-size: 5px 5px;
+  pointer-events: none;
+}
+
+.vg-hero-label {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #ffb36b;
+  border: 1px solid rgba(255, 179, 107, 0.4);
+  border-radius: 99px;
+  padding: 4px 10px;
+  margin-bottom: 12px;
+}
+
+.vg-hero-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+.vg-hero-name {
+  font-family: var(--vg-font-display);
+  font-weight: 700;
+  font-size: 22px;
+  line-height: 1.15;
+}
+.vg-hero-pct {
+  font-family: var(--vg-font-display);
+  font-weight: 900;
+  font-size: 40px;
+  line-height: 0.9;
+  white-space: nowrap;
+  background: var(--vg-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.vg-hero-desc {
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--vg-on-coal-dim);
+}
+.vg-hero-meta {
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--vg-on-coal-dim);
+}
+
+/* --- Чипы категорий / секций --------------------------------- */
+
+.vg-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 0 6px;
+  scrollbar-width: none;
+}
+.vg-chips::-webkit-scrollbar { display: none; }
+
+.vg-chip {
+  border: 1px solid var(--tgui--outline, rgba(128, 128, 128, 0.25));
+  background: transparent;
+  color: var(--tgui--text_color, #000);
+  border-radius: 99px;
+  padding: 7px 14px;
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+.vg-chip:active { transform: scale(0.94); }
+.vg-chip.is-on {
+  border-color: transparent;
+  background: var(--vg-grad);
+  color: #fff;
+  font-weight: 600;
+}
+
+/* --- Карточка партнёра ---------------------------------------- */
+
+.vg-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  margin-bottom: 10px;
+  border-radius: var(--vg-radius);
+  background: var(--tgui--section_bg_color, var(--tgui--secondary_bg_color, #f4f4f7));
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.03);
+  cursor: pointer;
+  transition: transform 0.13s ease;
+}
+.vg-card:active { transform: scale(0.98); }
+
+.vg-logo {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  flex-shrink: 0;
+  object-fit: cover;
+  background: var(--vg-coal-2);
+  color: var(--vg-amber);
+  font-family: var(--vg-font-display);
+  font-weight: 700;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vg-card-body { flex: 1; min-width: 0; }
+.vg-card-name {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--tgui--text_color, #000);
+}
+.vg-card-meta {
+  font-size: 12.5px;
+  margin-top: 2px;
+  color: var(--tgui--hint_color, #8a8a8e);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vg-pct {
+  font-family: var(--vg-font-display);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--vg-accent);
+  white-space: nowrap;
+}
+
+.vg-empty {
+  text-align: center;
+  padding: 36px 16px;
+  color: var(--tgui--hint_color, #8a8a8e);
+  font-size: 14px;
+}
+
+.vg-loader {
+  display: flex;
+  justify-content: center;
+  padding: 48px 0;
+}
+
+/* --- Экран активации ------------------------------------------ */
+
+@keyframes vg-ring-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes vg-drift {
+  from { background-position: 0 0; }
+  to   { background-position: 56px 56px; }
+}
+@keyframes vg-blink {
+  50% { opacity: 0.35; }
+}
+
+.vg-act {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 24px 16px;
+  justify-content: center;
+  gap: 6px;
   text-align: center;
+  padding: 24px;
+  background:
+    radial-gradient(130% 90% at 50% -12%, rgba(255, 138, 30, 0.3), transparent 58%),
+    var(--vg-coal);
+  color: var(--vg-on-coal);
 }
-.activation .clock {
-  font-size: 44px;
+
+.vg-act::before {
+  /* дрейфующая диагональная сетка — движение видно даже боковым зрением,
+     статичный скриншот выдаёт себя мгновенно */
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 28px);
+  animation: vg-drift 6s linear infinite;
+  pointer-events: none;
+}
+
+.vg-act > * { position: relative; }
+
+.vg-act-partner {
+  font-family: var(--vg-font-display);
+  font-weight: 700;
+  font-size: 21px;
+  line-height: 1.2;
+}
+
+.vg-act-pct {
+  font-family: var(--vg-font-display);
+  font-weight: 900;
+  font-size: 74px;
+  line-height: 1;
+  margin: 4px 0 2px;
+  background: var(--vg-grad);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.vg-act-kind {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #ffb36b;
+}
+
+.vg-act-client {
+  margin-top: 10px;
+  font-size: 15px;
+  color: var(--vg-on-coal-dim);
+}
+
+.vg-act-ring {
+  position: relative;
+  width: 108px;
+  height: 108px;
+  margin: 18px 0 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.vg-act-ring::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  padding: 3px;
+  background: conic-gradient(from 0deg, #ff5e2b, #ffc069, transparent 62%, #ff5e2b);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: vg-ring-spin 2.6s linear infinite;
+}
+.vg-act-sign { font-size: 54px; line-height: 1; }
+
+.vg-act-clock {
+  font-family: var(--vg-font-display);
+  font-weight: 700;
+  font-size: 46px;
   font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+.vg-act-clock .vg-colon { animation: vg-blink 1s steps(1) infinite; }
+
+.vg-act-date {
+  font-size: 14px;
+  color: var(--vg-on-coal-dim);
+}
+
+.vg-act-note {
+  margin-top: 16px;
+  max-width: 300px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--vg-on-coal-dim);
+}
+
+.vg-act-link {
+  margin-top: 10px;
+  background: none;
+  border: none;
+  font-size: 13px;
+  color: #ffb36b;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* --- Профиль --------------------------------------------------- */
+
+.vg-save-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--vg-radius);
+  background:
+    radial-gradient(110% 150% at 100% 0%, rgba(255, 138, 30, 0.34), transparent 55%),
+    var(--vg-coal);
+  color: var(--vg-on-coal);
+  padding: 20px 18px;
+}
+.vg-save-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #ffb36b;
+}
+.vg-save-sum {
+  font-family: var(--vg-font-display);
+  font-weight: 900;
+  font-size: 42px;
+  line-height: 1.1;
+  margin-top: 6px;
+}
+.vg-save-sum small {
+  font-size: 22px;
   font-weight: 700;
 }
-.activation .sign {
-  font-size: 56px;
+.vg-save-meta {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--vg-on-coal-dim);
 }
-.activation .discount {
-  font-size: 32px;
+
+.vg-progress {
+  height: 8px;
+  border-radius: 99px;
+  background: var(--tgui--secondary_fill, rgba(128, 128, 128, 0.18));
+  overflow: hidden;
+}
+.vg-progress > div {
+  height: 100%;
+  border-radius: 99px;
+  background: var(--vg-grad);
+  transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* --- Карта ------------------------------------------------------ */
+
+.map-full {
+  height: calc(100dvh - 96px);
+  width: 100%;
+}
+
+.vg-locate {
+  position: absolute;
+  bottom: 18px;
+  right: 14px;
+  z-index: 1000;
+  border: none;
+  border-radius: 99px;
+  padding: 11px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--vg-grad);
+  box-shadow: 0 6px 18px rgba(255, 94, 43, 0.4);
+  cursor: pointer;
+  transition: transform 0.12s ease;
+}
+.vg-locate:active { transform: scale(0.95); }
+
+/* --- Статистика (кабинеты) -------------------------------------- */
+
+.vg-stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.vg-stat {
+  border-radius: var(--vg-radius);
+  padding: 14px;
+  background: var(--tgui--section_bg_color, var(--tgui--secondary_bg_color, #f4f4f7));
+}
+.vg-stat-num {
+  font-family: var(--vg-font-display);
   font-weight: 700;
-  color: var(--tgui--link_color, #2481cc);
+  font-size: 26px;
+  color: var(--tgui--text_color, #000);
+}
+.vg-stat-cap {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--tgui--hint_color, #8a8a8e);
+}
+
+.vg-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 88px;
+  padding: 14px;
+  border-radius: var(--vg-radius);
+  background: var(--tgui--section_bg_color, var(--tgui--secondary_bg_color, #f4f4f7));
+}
+.vg-bars > div {
+  flex: 1;
+  min-height: 3px;
+  border-radius: 3px 3px 1px 1px;
+  background: var(--vg-grad);
+  opacity: 0.85;
 }

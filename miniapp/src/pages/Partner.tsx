@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Avatar, Button, Cell, List, Placeholder, Section, Spinner } from '@telegram-apps/telegram-ui';
+import { Button, Placeholder, Spinner } from '@telegram-apps/telegram-ui';
 import { MapContainer, Marker, TileLayer } from 'react-leaflet';
 import { openLink } from '@telegram-apps/sdk-react';
 import { api, type Partner } from './../api';
@@ -14,7 +14,7 @@ export default function PartnerPage() {
     api<Partner>(`/partners/${id}`).then(setPartner).catch(() => setPartner(null));
   }, [id]);
 
-  if (partner === undefined) return <Spinner size="l" />;
+  if (partner === undefined) return <div className="vg-loader"><Spinner size="l" /></div>;
   if (partner === null) return <Placeholder header="Не найдено" description="Заведение недоступно" />;
 
   const route2gis = () => {
@@ -25,33 +25,60 @@ export default function PartnerPage() {
   };
 
   return (
-    <List>
-      <Section header={partner.name}>
-        {partner.logo_url && (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0' }}>
-            <Avatar size={96} src={partner.logo_url} acronym={partner.name[0]} />
+    <div className="vg-page vg-stagger">
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '8px 2px 4px' }}>
+        {partner.logo_url
+          ? <img className="vg-logo" style={{ width: 64, height: 64, borderRadius: 18 }} src={partner.logo_url} alt="" />
+          : <div className="vg-logo" style={{ width: 64, height: 64, borderRadius: 18, fontSize: 26 }}>{partner.name[0]}</div>}
+        <div>
+          <div className="vg-display" style={{ fontWeight: 700, fontSize: 20, color: 'var(--tgui--text_color)' }}>
+            {partner.name}
           </div>
-        )}
-        <Cell subtitle="Скидка по подписке" after={<b>−{partner.discount_premium}%</b>}>Подписчикам</Cell>
-        <Cell subtitle="По скидке дня" after={<b>−{partner.discount_free}%</b>}>Всем</Cell>
-        {partner.address && <Cell subtitle={partner.work_hours ?? ''}>{partner.address}</Cell>}
-      </Section>
+          {partner.category && (
+            <div style={{ fontSize: 13, color: 'var(--tgui--hint_color)', marginTop: 2 }}>
+              {partner.category}
+            </div>
+          )}
+        </div>
+      </div>
 
-      {partner.lat && partner.lng && (
-        <MapContainer center={[partner.lat, partner.lng]} zoom={16} style={{ height: 200 }}
-                      dragging={false} zoomControl={false}>
-          <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-                     attribution="© OpenStreetMap" />
-          <Marker position={[partner.lat, partner.lng]} icon={markerIcon} />
-        </MapContainer>
+      <div className="vg-stat-grid" style={{ marginTop: 12 }}>
+        <div className="vg-stat">
+          <div className="vg-stat-num" style={{ color: 'var(--vg-accent)' }}>−{partner.discount_premium}%</div>
+          <div className="vg-stat-cap">по подписке</div>
+        </div>
+        <div className="vg-stat">
+          <div className="vg-stat-num">−{partner.discount_free}%</div>
+          <div className="vg-stat-cap">по скидке дня, всем</div>
+        </div>
+      </div>
+
+      {(partner.address || partner.work_hours) && (
+        <div className="vg-card" style={{ marginTop: 12, cursor: 'default' }}>
+          <div className="vg-card-body">
+            {partner.address && <div className="vg-card-name">{partner.address}</div>}
+            {partner.work_hours && <div className="vg-card-meta">{partner.work_hours}</div>}
+          </div>
+        </div>
       )}
 
-      <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {partner.lat && partner.lng && (
+        <div style={{ borderRadius: 'var(--vg-radius)', overflow: 'hidden', marginTop: 2 }}>
+          <MapContainer center={[partner.lat, partner.lng]} zoom={16} style={{ height: 190 }}
+                        dragging={false} zoomControl={false}>
+            <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+                       attribution="© OpenStreetMap" />
+            <Marker position={[partner.lat, partner.lng]} icon={markerIcon} />
+          </MapContainer>
+        </div>
+      )}
+
+      <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
         <Button stretched onClick={route2gis}>Маршрут в 2GIS</Button>
-        <Button stretched mode="gray" disabled>
-          Для скидки — отсканируйте QR на кассе
-        </Button>
+        <div className="vg-empty" style={{ padding: '10px 16px' }}>
+          Для скидки отсканируйте QR на кассе заведения
+        </div>
       </div>
-    </List>
+    </div>
   );
 }

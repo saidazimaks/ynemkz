@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Avatar, Badge, Banner, Cell, Input, List, Section, Spinner } from '@telegram-apps/telegram-ui';
+import { Input, Spinner } from '@telegram-apps/telegram-ui';
 import { api, type DailyDeal, type Partner } from './../api';
+
+function Logo({ src, name }: { src: string | null; name: string }) {
+  return src
+    ? <img className="vg-logo" src={src} alt="" />
+    : <div className="vg-logo">{name[0]}</div>;
+}
 
 export default function Home() {
   const navigate = useNavigate();
@@ -25,49 +31,58 @@ export default function Home() {
       (!search || p.name.toLowerCase().includes(search.toLowerCase())),
   );
 
-  if (partners === null) return <Spinner size="l" />;
+  if (partners === null) return <div className="vg-loader"><Spinner size="l" /></div>;
 
   return (
-    <List>
-      {deal && (
-        <Banner
-          type="section"
-          header={`Скидка дня: ${deal.name}`}
-          subheader={`−${deal.discount_free}% для всех · ${deal.description ?? ''}`}
-          onClick={() => navigate(`/partners/${deal.id}`)}
-        />
-      )}
-
-      <div style={{ padding: '8px 16px 0' }}>
-        <Input placeholder="Поиск заведения" value={search}
-               onChange={(e) => setSearch(e.target.value)} />
+    <div className="vg-page vg-stagger">
+      <div className="vg-brand">
+        <span className="vg-brand-name">Выгодный Город</span>
+        <span className="vg-brand-city">Экибастуз</span>
       </div>
 
-      <Section header="Категории">
-        <div style={{ display: 'flex', gap: 8, padding: '8px 16px', flexWrap: 'wrap' }}>
-          <Badge type="number" mode={category === null ? 'primary' : 'gray'}
-                 onClick={() => setCategory(null)}>Все</Badge>
-          {categories.map((c) => (
-            <Badge key={c} type="number" mode={category === c ? 'primary' : 'gray'}
-                   onClick={() => setCategory(c)}>{c}</Badge>
-          ))}
+      {deal && (
+        <div className="vg-hero" onClick={() => navigate(`/partners/${deal.id}`)}>
+          <div className="vg-hero-label">Скидка дня · для всех</div>
+          <div className="vg-hero-row">
+            <div className="vg-hero-name">{deal.name}</div>
+            <div className="vg-hero-pct">−{deal.discount_free}%</div>
+          </div>
+          {deal.description && <div className="vg-hero-desc">{deal.description}</div>}
+          <div className="vg-hero-meta">
+            {deal.address ? `${deal.address} · ` : ''}сканируйте QR на кассе
+          </div>
         </div>
-      </Section>
+      )}
 
-      <Section header="Партнёры (скидка по подписке)">
-        {shown.map((p) => (
-          <Cell
-            key={p.id}
-            before={<Avatar size={40} src={p.logo_url ?? undefined} acronym={p.name[0]} />}
-            subtitle={`${p.address ?? ''}${p.work_hours ? ' · ' + p.work_hours : ''}`}
-            after={<Badge type="number" mode="primary">−{p.discount_premium}%</Badge>}
-            onClick={() => navigate(`/partners/${p.id}`)}
-          >
-            {p.name}
-          </Cell>
+      <div className="vg-h">Каталог</div>
+
+      <Input placeholder="Поиск заведения" value={search}
+             onChange={(e) => setSearch(e.target.value)} />
+
+      <div className="vg-chips" style={{ marginTop: 10 }}>
+        <button className={`vg-chip ${category === null ? 'is-on' : ''}`}
+                onClick={() => setCategory(null)}>Все</button>
+        {categories.map((c) => (
+          <button key={c} className={`vg-chip ${category === c ? 'is-on' : ''}`}
+                  onClick={() => setCategory(c)}>{c}</button>
         ))}
-        {shown.length === 0 && <Cell subtitle="Каталог пока пуст">—</Cell>}
-      </Section>
-    </List>
+      </div>
+
+      <div style={{ marginTop: 6 }}>
+        {shown.map((p) => (
+          <div key={p.id} className="vg-card" onClick={() => navigate(`/partners/${p.id}`)}>
+            <Logo src={p.logo_url} name={p.name} />
+            <div className="vg-card-body">
+              <div className="vg-card-name">{p.name}</div>
+              <div className="vg-card-meta">
+                {p.address ?? ''}{p.work_hours ? ` · ${p.work_hours}` : ''}
+              </div>
+            </div>
+            <div className="vg-pct">−{p.discount_premium}%</div>
+          </div>
+        ))}
+        {shown.length === 0 && <div className="vg-empty">Ничего не нашлось</div>}
+      </div>
+    </div>
   );
 }

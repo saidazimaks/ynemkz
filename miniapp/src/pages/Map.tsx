@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
-import { Button } from '@telegram-apps/telegram-ui';
 import { api, type Partner } from './../api';
 import { markerIcon } from './leafletIcon';
 
@@ -15,9 +14,7 @@ function LocateButton() {
     );
   };
   return (
-    <div style={{ position: 'absolute', bottom: 16, right: 16, zIndex: 1000 }}>
-      <Button size="s" onClick={locate}>Рядом со мной</Button>
-    </div>
+    <button className="vg-locate" onClick={locate}>Рядом со мной</button>
   );
 }
 

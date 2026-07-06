@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Badge, Button, Cell, Input, List, Placeholder, Section, Spinner, Switch } from '@telegram-apps/telegram-ui';
+import { Button, Cell, Input, List, Placeholder, Section, Spinner, Switch } from '@telegram-apps/telegram-ui';
 import { api, ApiError } from './../api';
 
 interface Stats {
@@ -63,73 +63,86 @@ export default function PartnerCabinet() {
     setCard(card ? { ...card, is_paused: paused } : card);
   };
 
-  if (stats === undefined) return <Spinner size="l" />;
+  if (stats === undefined) return <div className="vg-loader"><Spinner size="l" /></div>;
   if (stats === null)
     return <Placeholder header="Нет доступа" description="Кабинет доступен партнёрам клуба." />;
 
   const max = Math.max(...stats.by_day.map((d) => d.visits), 1);
 
   return (
-    <List>
+    <div className="vg-page vg-stagger">
       {card && (
-        <Section header="Моя карточка">
-          <Cell subtitle={`${card.category ?? ''} · ${card.address ?? ''}`}
-                after={<Badge type="number" mode="primary">−{card.discount_premium}%</Badge>}>
-            {card.name}
-          </Cell>
-          <Cell subtitle="Карточка скрывается из каталога и карты"
-                after={<Switch checked={card.is_paused}
-                               onChange={(e) => togglePause(e.target.checked)} />}>
-            Пауза («отпуск»)
-          </Cell>
-          <Cell subtitle="Изменение данных — через админа (кнопка «Помощь» в боте)">
-            Скидка дня −{card.discount_free}% · подписчикам −{card.discount_premium}%
-          </Cell>
-        </Section>
+        <>
+          <div className="vg-brand">
+            <span className="vg-brand-name">{card.name}</span>
+            <span className="vg-brand-city">кабинет</span>
+          </div>
+          <div className="vg-card" style={{ cursor: 'default' }}>
+            <div className="vg-card-body">
+              <div className="vg-card-name">Пауза («отпуск»)</div>
+              <div className="vg-card-meta">Карточка скрывается из каталога и карты</div>
+            </div>
+            <Switch checked={card.is_paused} onChange={(e) => togglePause(e.target.checked)} />
+          </div>
+        </>
       )}
 
-      <Section header="Визиты">
-        <Cell after={<b>{stats.today}</b>}>Сегодня</Cell>
-        <Cell after={<b>{stats.week}</b>}>Неделя</Cell>
-        <Cell after={<b>{stats.month}</b>} subtitle={`${stats.unique_month} уникальных`}>Месяц</Cell>
-        <Cell after={<b>{stats.new_clients} / {stats.repeat_clients}</b>}
-              subtitle="за последние 30 дней">
-          Новые / повторные
-        </Cell>
-      </Section>
+      <div className="vg-h">Визиты</div>
+      <div className="vg-stat-grid">
+        <div className="vg-stat">
+          <div className="vg-stat-num" style={{ color: 'var(--vg-accent)' }}>{stats.today}</div>
+          <div className="vg-stat-cap">сегодня</div>
+        </div>
+        <div className="vg-stat">
+          <div className="vg-stat-num">{stats.week}</div>
+          <div className="vg-stat-cap">за неделю</div>
+        </div>
+        <div className="vg-stat">
+          <div className="vg-stat-num">{stats.month}</div>
+          <div className="vg-stat-cap">за месяц · {stats.unique_month} уникальных</div>
+        </div>
+        <div className="vg-stat">
+          <div className="vg-stat-num">{stats.new_clients}/{stats.repeat_clients}</div>
+          <div className="vg-stat-cap">новые / повторные, 30 дней</div>
+        </div>
+      </div>
 
       {stats.by_day.length > 0 && (
-        <Section header="Последние 30 дней">
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 80, padding: 16 }}>
+        <>
+          <div className="vg-h">Последние 30 дней</div>
+          <div className="vg-bars">
             {stats.by_day.map((d) => (
               <div key={d.day} title={`${d.day}: ${d.visits}`}
-                   style={{ flex: 1, background: 'var(--tgui--link_color, #2481cc)',
-                            height: `${(d.visits / max) * 100}%`, borderRadius: 2 }} />
+                   style={{ height: `${(d.visits / max) * 100}%` }} />
             ))}
           </div>
-        </Section>
+        </>
       )}
 
-      <Section header="Ввести код клиента (фолбэк)">
-        <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <Input placeholder="A7K2M9" value={code}
-                 onChange={(e) => setCode(e.target.value)} />
-          <Button stretched disabled={code.trim().length < 6} onClick={redeem}>Записать визит</Button>
-          {result && <div>{result}</div>}
-        </div>
-      </Section>
+      <div className="vg-h">Код клиента (фолбэк)</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <Input placeholder="A7K2M9" value={code}
+               onChange={(e) => setCode(e.target.value)} />
+        <Button stretched disabled={code.trim().length < 6} onClick={redeem}>Записать визит</Button>
+        {result && <div style={{ textAlign: 'center', fontSize: 14 }}>{result}</div>}
+      </div>
 
       {feed.length > 0 && (
-        <Section header="Последние активации">
-          {feed.map((a, i) => (
-            <Cell key={i}
-                  subtitle={new Date(a.used_at).toLocaleString('ru-RU')}
-                  after={`−${a.discount}%`}>
-              {a.full_name ?? 'Клиент'}
-            </Cell>
-          ))}
-        </Section>
+        <>
+          <div className="vg-h">Последние активации</div>
+          <List>
+            <Section>
+              {feed.map((a, i) => (
+                <Cell key={i}
+                      subtitle={new Date(a.used_at).toLocaleString('ru-RU')}
+                      after={<span className="vg-pct">−{a.discount}%</span>}>
+                  {a.full_name ?? 'Клиент'}
+                </Cell>
+              ))}
+            </Section>
+          </List>
+        </>
       )}
-    </List>
+    </div>
   );
 }

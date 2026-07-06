@@ -46,11 +46,24 @@ export default function Overview() {
   return (
     <List>
       {stats && (
-        <Section header="Сводка">
-          <Cell after={<b>{stats.users_total}</b>} subtitle={`+${stats.users_today} сегодня`}>Пользователей</Cell>
-          <Cell after={<b>{stats.subs_active}</b>} subtitle={`конверсия ${conversion}%`}>Активных подписок</Cell>
-          <Cell after={<b>{stats.visits_today}</b>} subtitle={`${stats.visits_month} за месяц`}>Визитов сегодня</Cell>
-        </Section>
+        <div className="vg-stat-grid" style={{ padding: '0 16px' }}>
+          <div className="vg-stat">
+            <div className="vg-stat-num">{stats.users_total}</div>
+            <div className="vg-stat-cap">пользователей · +{stats.users_today} сегодня</div>
+          </div>
+          <div className="vg-stat">
+            <div className="vg-stat-num" style={{ color: 'var(--vg-accent)' }}>{stats.subs_active}</div>
+            <div className="vg-stat-cap">подписок · конверсия {conversion}%</div>
+          </div>
+          <div className="vg-stat">
+            <div className="vg-stat-num">{stats.visits_today}</div>
+            <div className="vg-stat-cap">визитов сегодня</div>
+          </div>
+          <div className="vg-stat">
+            <div className="vg-stat-num">{stats.visits_month}</div>
+            <div className="vg-stat-cap">визитов за месяц</div>
+          </div>
+        </div>
       )}
 
       <Section header={`Очередь чеков (${receipts.length})`}>
