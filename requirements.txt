@@ -1,0 +1,10 @@
+aiogram>=3.17,<4
+asyncpg>=0.30
+supabase>=2.10
+APScheduler>=3.11,<4
+qrcode[pil]>=8.0
+pydantic>=2.10
+pydantic-settings>=2.7
+python-dotenv>=1.0
+fastapi>=0.115
+uvicorn[standard]>=0.34

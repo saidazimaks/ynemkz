@@ -1,0 +1,96 @@
+"""Клавиатуры (reply/inline)."""
+from __future__ import annotations
+
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    ReplyKeyboardMarkup,
+    WebAppInfo,
+)
+
+from bot.config import settings
+from bot.texts import t
+
+
+def miniapp_button(text: str, path: str = "") -> InlineKeyboardButton | None:
+    """Кнопка, открывающая Mini App (если MINIAPP_URL задан)."""
+    if not settings.miniapp_url:
+        return None
+    return InlineKeyboardButton(text=text, web_app=WebAppInfo(url=settings.miniapp_url + path))
+
+
+def miniapp_kb(text: str, path: str = "") -> InlineKeyboardMarkup | None:
+    btn = miniapp_button(text, path)
+    return InlineKeyboardMarkup(inline_keyboard=[[btn]]) if btn else None
+
+
+def consent_kb(lang: str = "ru") -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=t("btn_consent", lang))]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
+
+
+def phone_kb(lang: str = "ru") -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=t("btn_share_phone", lang), request_contact=True)]],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+    )
+
+
+def main_menu_kb(lang: str = "ru") -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=t("btn_daily", lang)), KeyboardButton(text=t("btn_all", lang))],
+            [KeyboardButton(text=t("btn_sub", lang)), KeyboardButton(text=t("btn_raffle", lang))],
+            [KeyboardButton(text=t("btn_invite", lang)), KeyboardButton(text=t("btn_help", lang))],
+        ],
+        resize_keyboard=True,
+    )
+
+
+def receipt_decision_kb(subscription_id: int) -> InlineKeyboardMarkup:
+    """Кнопки ✅/❌ под карточкой чека для админа."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"sub:ok:{subscription_id}"),
+                InlineKeyboardButton(text="❌ Отклонить", callback_data=f"sub:no:{subscription_id}"),
+            ]
+        ]
+    )
+
+
+def help_kb(lang: str = "ru") -> InlineKeyboardMarkup:
+    """Кнопки под FAQ: связь с админом и жалоба (раздел 3.6)."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=t("btn_contact_admin", lang), callback_data="help:admin")],
+            [InlineKeyboardButton(text=t("btn_complain", lang), callback_data="help:complain")],
+        ]
+    )
+
+
+def notify_toggle_kb(enabled: bool, lang: str = "ru") -> InlineKeyboardMarkup:
+    """Переключатель утренних уведомлений + вход в Mini App."""
+    key = "btn_notify_on" if enabled else "btn_notify_off"
+    rows = [[InlineKeyboardButton(text=t(key, lang), callback_data="notify:toggle")]]
+    app_btn = miniapp_button("📱 Открыть приложение", "/profile")
+    if app_btn:
+        rows.append([app_btn])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def broadcast_confirm_kb() -> InlineKeyboardMarkup:
+    """Подтверждение рассылки после предпросмотра (раздел 3.5)."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(text="📣 Отправить", callback_data="bc:go"),
+                InlineKeyboardButton(text="✖️ Отмена", callback_data="bc:cancel"),
+            ]
+        ]
+    )

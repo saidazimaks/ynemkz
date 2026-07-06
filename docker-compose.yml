@@ -1,0 +1,16 @@
+# Два процесса: бот (long polling) + API для Mini App. Общий образ, общий db.py.
+# Mini App хостится отдельно (Cloudflare Pages), сюда не входит.
+services:
+  bot:
+    build: .
+    restart: always
+    env_file: .env
+    command: python -m bot.main
+
+  api:
+    build: .
+    restart: always
+    env_file: .env
+    command: uvicorn api.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"

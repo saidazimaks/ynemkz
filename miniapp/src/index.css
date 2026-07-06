@@ -1,0 +1,33 @@
+/* Тема приходит из Telegram (@telegram-apps/telegram-ui) — свои стили минимальны. */
+body {
+  margin: 0;
+  background: var(--tgui--bg_color, #fff);
+}
+
+.map-full {
+  height: calc(100vh - 96px); /* минус таббар */
+  width: 100%;
+}
+
+/* Экран активации */
+.activation {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 24px 16px;
+  text-align: center;
+}
+.activation .clock {
+  font-size: 44px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+.activation .sign {
+  font-size: 56px;
+}
+.activation .discount {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--tgui--link_color, #2481cc);
+}
