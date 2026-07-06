@@ -21,7 +21,10 @@
 
 body {
   margin: 0;
-  background: var(--tgui--bg_color, #fff);
+  /* --tgui--* живут внутри AppRoot и до body не достают — берём тему Telegram,
+     привязанную к :root через themeParams.bindCssVars() (см. main.tsx) */
+  background: var(--tg-theme-secondary-bg-color, var(--tg-theme-bg-color, #fff));
+  color: var(--tg-theme-text-color, #000);
   font-family: var(--tgui--font-family);
   -webkit-font-smoothing: antialiased;
 }
