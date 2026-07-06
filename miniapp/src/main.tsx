@@ -1,3 +1,4 @@
+import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { init, backButton, themeParams, miniApp } from '@telegram-apps/sdk-react';
 import { AppRoot } from '@telegram-apps/telegram-ui';
@@ -16,8 +17,26 @@ try {
   if (miniApp.bindCssVars.isAvailable()) miniApp.bindCssVars();
 } catch { /* браузер без Telegram */ }
 
+/** Ошибка рендера показывается текстом, а не пустым экраном. */
+class Boundary extends React.Component<{ children: React.ReactNode }, { err: Error | null }> {
+  state = { err: null as Error | null };
+  static getDerivedStateFromError(err: Error) { return { err }; }
+  render() {
+    if (this.state.err) {
+      return (
+        <div style={{ padding: 24, fontFamily: 'monospace', fontSize: 12, whiteSpace: 'pre-wrap' }}>
+          Ошибка приложения:{'\n'}{String(this.state.err)}
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <AppRoot>
-    <App />
-  </AppRoot>,
+  <Boundary>
+    <AppRoot>
+      <App />
+    </AppRoot>
+  </Boundary>,
 );
