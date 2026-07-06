@@ -1,15 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { HashRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
-import { retrieveLaunchParams } from '@telegram-apps/sdk-react';
+import { backButton, retrieveLaunchParams } from '@telegram-apps/sdk-react';
 import { Tabbar } from '@telegram-apps/telegram-ui';
-import { api, type Me } from './api';
+import { api, readCache, writeCache, type Me } from './api';
+import { PageSkeleton } from './hooks';
 import Home from './pages/Home';
-import PartnerPage from './pages/Partner';
-import MapPage from './pages/Map';
 import Activate from './pages/Activate';
 import Profile from './pages/Profile';
 import PartnerCabinet from './pages/PartnerCabinet';
 import Admin from './pages/admin';
+
+// Leaflet (~40% бандла) нужен только этим страницам — грузим отдельным чанком
+const PartnerPage = lazy(() => import('./pages/Partner'));
+const MapPage = lazy(() => import('./pages/Map'));
 
 /** startapp=p_123 (наклейка на кассе) → сразу экран активации. */
 function StartParamRedirect() {
@@ -21,6 +24,28 @@ function StartParamRedirect() {
       if (m) navigate(`/activate/${m[1]}`, { replace: true });
     } catch { /* вне Telegram */ }
   }, [navigate]);
+  return null;
+}
+
+/** Системная BackButton Telegram на маршрутах глубже таббара. */
+function SystemBack() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const deep = /^\/(partners|activate)\//.test(location.pathname);
+
+  useEffect(() => {
+    if (!deep) return;
+    try {
+      if (backButton.show.isAvailable()) backButton.show();
+      const off = backButton.onClick(() =>
+        window.history.length > 1 ? navigate(-1) : navigate('/'),
+      );
+      return () => {
+        off();
+        try { backButton.hide(); } catch { /* вне Telegram */ }
+      };
+    } catch { return; }
+  }, [deep, navigate]);
   return null;
 }
 
@@ -41,7 +66,7 @@ function Nav({ role }: { role: Me['role'] | null }) {
   if (location.pathname.startsWith('/activate')) return null; // на экране активации таббар мешает
 
   return (
-    <Tabbar>
+    <Tabbar className="vg-tabbar">
       {tabs.map((tab) => (
         <Tabbar.Item
           key={tab.id}
@@ -55,23 +80,32 @@ function Nav({ role }: { role: Me['role'] | null }) {
 }
 
 export default function App() {
-  const [me, setMe] = useState<Me | null>(null);
+  // undefined — грузится (без кэша), null — не зарегистрирован/ошибка
+  const [me, setMe] = useState<Me | null | undefined>(() => readCache<Me>('/me'));
+
   useEffect(() => {
-    api<Me>('/me').then(setMe).catch(() => setMe(null));
+    api<Me>('/me')
+      .then((m) => { setMe(m); writeCache('/me', m); })
+      .catch(() => setMe((cur) => (cur === undefined ? null : cur)));
   }, []);
+
+  const onChange = (m: Me) => { setMe(m); writeCache('/me', m); };
 
   return (
     <HashRouter>
       <StartParamRedirect />
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/partners/:id" element={<PartnerPage />} />
-        <Route path="/map" element={<MapPage />} />
-        <Route path="/activate/:partnerId" element={<Activate />} />
-        <Route path="/profile" element={<Profile me={me} onChange={setMe} />} />
-        <Route path="/cabinet" element={<PartnerCabinet />} />
-        <Route path="/admin" element={<Admin />} />
-      </Routes>
+      <SystemBack />
+      <Suspense fallback={<PageSkeleton />}>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/partners/:id" element={<PartnerPage />} />
+          <Route path="/map" element={<MapPage />} />
+          <Route path="/activate/:partnerId" element={<Activate />} />
+          <Route path="/profile" element={<Profile me={me} onChange={onChange} />} />
+          <Route path="/cabinet" element={<PartnerCabinet />} />
+          <Route path="/admin" element={<Admin />} />
+        </Routes>
+      </Suspense>
       <Nav role={me?.role ?? null} />
     </HashRouter>
   );

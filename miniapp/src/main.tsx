@@ -1,6 +1,13 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { init, backButton, themeParams, miniApp } from '@telegram-apps/sdk-react';
+import {
+  init,
+  backButton,
+  themeParams,
+  miniApp,
+  viewport,
+  closingBehavior,
+} from '@telegram-apps/sdk-react';
 import { AppRoot } from '@telegram-apps/telegram-ui';
 import '@telegram-apps/telegram-ui/dist/styles.css';
 import 'leaflet/dist/leaflet.css';
@@ -15,6 +22,17 @@ try {
   if (themeParams.bindCssVars.isAvailable()) themeParams.bindCssVars();
   if (miniApp.mountSync.isAvailable()) miniApp.mountSync();
   if (miniApp.bindCssVars.isAvailable()) miniApp.bindCssVars();
+  // Открытие сразу на весь экран + safe-area инсеты как CSS-переменные
+  if (viewport.mount.isAvailable()) {
+    void viewport.mount().then(() => {
+      try {
+        if (viewport.expand.isAvailable()) viewport.expand();
+        if (viewport.bindCssVars.isAvailable()) viewport.bindCssVars();
+      } catch { /* вне Telegram */ }
+    });
+  }
+  // Подтверждение закрытия включает экран активации (Activate.tsx)
+  if (closingBehavior.mount.isAvailable()) closingBehavior.mount();
 } catch { /* браузер без Telegram */ }
 
 /** Ошибка рендера показывается текстом, а не пустым экраном. */

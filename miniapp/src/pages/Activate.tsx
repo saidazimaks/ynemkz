@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Placeholder, Spinner } from '@telegram-apps/telegram-ui';
-import { hapticFeedback, openTelegramLink } from '@telegram-apps/sdk-react';
+import { closingBehavior, hapticFeedback, openTelegramLink } from '@telegram-apps/sdk-react';
 import { api, ApiError, type Activation } from './../api';
 
 type State =
@@ -45,6 +45,19 @@ export default function Activate() {
         }
       });
   }, [partnerId]);
+
+  // Пока экран живой — случайный свайп вниз не закроет приложение у кассы
+  useEffect(() => {
+    if (state.kind !== 'active') return;
+    try {
+      if (closingBehavior.enableConfirmation.isAvailable()) closingBehavior.enableConfirmation();
+    } catch { /* вне Telegram */ }
+    return () => {
+      try {
+        if (closingBehavior.disableConfirmation.isAvailable()) closingBehavior.disableConfirmation();
+      } catch { /* вне Telegram */ }
+    };
+  }, [state.kind]);
 
   // Тикающие часы + авто-истечение
   useEffect(() => {

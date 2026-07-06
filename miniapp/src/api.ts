@@ -21,6 +21,23 @@ export class ApiError extends Error {
   }
 }
 
+// --- Кэш последних ответов (sessionStorage): мгновенный повторный рендер ----
+
+export function readCache<T>(path: string): T | undefined {
+  try {
+    const raw = sessionStorage.getItem(`vg:${path}`);
+    return raw ? (JSON.parse(raw) as T) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function writeCache(path: string, value: unknown): void {
+  try {
+    sessionStorage.setItem(`vg:${path}`, JSON.stringify(value));
+  } catch { /* приватный режим и т.п. */ }
+}
+
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   const res = await fetch(`${BASE}/api${path}`, {
     ...options,

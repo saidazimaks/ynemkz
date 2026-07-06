@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Button, Placeholder, Spinner } from '@telegram-apps/telegram-ui';
+import { Placeholder } from '@telegram-apps/telegram-ui';
 import { MapContainer, Marker, TileLayer } from 'react-leaflet';
 import { openLink } from '@telegram-apps/sdk-react';
 import { api, type Partner } from './../api';
+import { useMainButton } from './../hooks';
 import { markerIcon } from './leafletIcon';
 
 export default function PartnerPage() {
@@ -14,15 +15,25 @@ export default function PartnerPage() {
     api<Partner>(`/partners/${id}`).then(setPartner).catch(() => setPartner(null));
   }, [id]);
 
-  if (partner === undefined) return <div className="vg-loader"><Spinner size="l" /></div>;
-  if (partner === null) return <Placeholder header="Не найдено" description="Заведение недоступно" />;
-
   const route2gis = () => {
+    if (!partner) return;
     // 2GIS — стандарт в Казахстане (раздел 4.5)
     const query = encodeURIComponent(`${partner.name} ${partner.address ?? 'Экибастуз'}`);
     try { openLink(`https://2gis.kz/search/${query}`); }
     catch { window.open(`https://2gis.kz/search/${query}`); }
   };
+
+  // Главное действие — системная кнопка Telegram
+  useMainButton('Маршрут в 2GIS', route2gis, { visible: !!partner });
+
+  if (partner === undefined)
+    return (
+      <div className="vg-page">
+        <div className="vg-skel vg-skel-hero" />
+        <div className="vg-skel vg-skel-card" />
+      </div>
+    );
+  if (partner === null) return <Placeholder header="Не найдено" description="Заведение недоступно" />;
 
   return (
     <div className="vg-page vg-stagger">
@@ -73,11 +84,9 @@ export default function PartnerPage() {
         </div>
       )}
 
-      <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <Button stretched onClick={route2gis}>Маршрут в 2GIS</Button>
-        <div className="vg-empty" style={{ padding: '10px 16px' }}>
-          Для скидки отсканируйте QR на кассе заведения
-        </div>
+      {/* «Маршрут в 2GIS» — системной MainButton внизу */}
+      <div className="vg-empty" style={{ padding: '18px 16px' }}>
+        Для скидки отсканируйте QR на кассе заведения
       </div>
     </div>
   );

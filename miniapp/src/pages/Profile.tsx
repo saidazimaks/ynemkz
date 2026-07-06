@@ -2,10 +2,14 @@ import { useEffect, useState } from 'react';
 import { Button, Cell, List, Placeholder, Section, Switch } from '@telegram-apps/telegram-ui';
 import { invoice, openTelegramLink } from '@telegram-apps/sdk-react';
 import { api, type Me, type Visit } from './../api';
+import { useMainButton } from './../hooks';
 
 const BOT = import.meta.env.VITE_BOT_USERNAME as string | undefined;
 
-export default function Profile({ me, onChange }: { me: Me | null; onChange: (m: Me) => void }) {
+export default function Profile({ me, onChange }: {
+  me: Me | null | undefined;
+  onChange: (m: Me) => void;
+}) {
   const [visits, setVisits] = useState<Visit[]>([]);
   const [paying, setPaying] = useState(false);
 
@@ -13,7 +17,22 @@ export default function Profile({ me, onChange }: { me: Me | null; onChange: (m:
     api<Visit[]>('/me/visits').then(setVisits).catch(() => {});
   }, []);
 
-  if (!me)
+  // Главное действие экрана — системная кнопка Telegram
+  const canPay = !!me && !me.subscription.active && !me.subscription.pending;
+  useMainButton('Оплатить Stars — мгновенно', () => void payStars(), {
+    visible: canPay,
+    loading: paying,
+  });
+
+  if (me === undefined)
+    return (
+      <div className="vg-page">
+        <div className="vg-skel vg-skel-hero" />
+        {Array.from({ length: 3 }, (_, i) => <div key={i} className="vg-skel vg-skel-card" />)}
+      </div>
+    );
+
+  if (me === null)
     return (
       <Placeholder header="Нужна регистрация"
                    description="Запустите бота и поделитесь номером — затем возвращайтесь."
@@ -90,7 +109,7 @@ export default function Profile({ me, onChange }: { me: Me | null; onChange: (m:
               <div className="vg-card-meta">Скидки 10–15% у всех партнёров на 30 дней</div>
             </div>
           </div>
-          <Button stretched loading={paying} onClick={payStars}>Оплатить Stars — мгновенно</Button>
+          {/* Stars — системной MainButton внизу; Kaspi — запасной путь */}
           <Button stretched mode="gray" onClick={payKaspi}>Оплатить Kaspi (чек в боте)</Button>
         </div>
       )}

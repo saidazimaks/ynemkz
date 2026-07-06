@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Input, Spinner } from '@telegram-apps/telegram-ui';
-import { api, type DailyDeal, type Partner } from './../api';
+import { Input } from '@telegram-apps/telegram-ui';
+import { type DailyDeal, type Partner } from './../api';
+import { useCachedApi } from './../hooks';
 
 function Logo({ src, name }: { src: string | null; name: string }) {
   return src
@@ -11,15 +12,10 @@ function Logo({ src, name }: { src: string | null; name: string }) {
 
 export default function Home() {
   const navigate = useNavigate();
-  const [deal, setDeal] = useState<DailyDeal | null>(null);
-  const [partners, setPartners] = useState<Partner[] | null>(null);
+  const deal = useCachedApi<DailyDeal | null>('/daily-deal');
+  const partners = useCachedApi<Partner[]>('/catalog');
   const [category, setCategory] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-
-  useEffect(() => {
-    api<DailyDeal | null>('/daily-deal').then(setDeal).catch(() => {});
-    api<Partner[]>('/catalog').then(setPartners).catch(() => setPartners([]));
-  }, []);
 
   const categories = useMemo(
     () => [...new Set((partners ?? []).map((p) => p.category ?? 'Другое'))],
@@ -31,7 +27,17 @@ export default function Home() {
       (!search || p.name.toLowerCase().includes(search.toLowerCase())),
   );
 
-  if (partners === null) return <div className="vg-loader"><Spinner size="l" /></div>;
+  if (partners === undefined)
+    return (
+      <div className="vg-page">
+        <div className="vg-brand">
+          <span className="vg-brand-name">Ynem</span>
+          <span className="vg-brand-city">Экибастуз</span>
+        </div>
+        <div className="vg-skel vg-skel-hero" />
+        {Array.from({ length: 4 }, (_, i) => <div key={i} className="vg-skel vg-skel-card" />)}
+      </div>
+    );
 
   return (
     <div className="vg-page vg-stagger">
