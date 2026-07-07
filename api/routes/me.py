@@ -1,6 +1,7 @@
 """Профиль, визиты, активация скидки, оплата Stars."""
 from __future__ import annotations
 
+import asyncio
 import contextlib
 from datetime import datetime, timezone
 
@@ -20,6 +21,13 @@ router = APIRouter()
 def _bot() -> Bot:
     """aiogram Bot без polling — для пингов и инвойсов из API."""
     return Bot(token=settings.bot_token)
+
+
+async def _ping_partner(chat_id: int, text: str) -> None:
+    bot = _bot()
+    with contextlib.suppress(Exception):
+        await bot.send_message(chat_id, text)
+    await bot.session.close()
 
 
 @router.get("/me")
@@ -89,14 +97,12 @@ async def activate(body: ActivateBody, user: dict = Depends(get_user)) -> dict:
     now = datetime.now(timezone.utc)
     partner = result["partner"]
     if partner["user_id"]:
-        bot = _bot()
-        with contextlib.suppress(Exception):
-            await bot.send_message(
-                partner["user_id"],
-                t("partner_ping", name=user["full_name"] or "Клиент",
-                  discount=result["discount"], time=now.strftime("%H:%M")),
-            )
-        await bot.session.close()
+        # Пинг партнёру — в фоне: клиент не должен ждать Telegram API
+        asyncio.create_task(_ping_partner(
+            partner["user_id"],
+            t("partner_ping", name=user["full_name"] or "Клиент",
+              discount=result["discount"], time=now.strftime("%H:%M")),
+        ))
 
     return {
         "partner_name": partner["name"],

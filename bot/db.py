@@ -19,7 +19,9 @@ async def init_pool() -> asyncpg.Pool:
     """Создать пул подключений к Postgres (idempotent)."""
     global _pool
     if _pool is None:
-        _pool = await asyncpg.create_pool(settings.database_url, min_size=1, max_size=10)
+        # min_size=4: параллельные запросы Mini App не ждут создания
+        # TLS-коннектов к Supabase pooler (дорого, особенно межрегионально)
+        _pool = await asyncpg.create_pool(settings.database_url, min_size=4, max_size=10)
     return _pool
 
 
