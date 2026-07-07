@@ -38,7 +38,7 @@ export default function Users() {
   return (
     <List>
       <div style={{ padding: '4px 16px' }}>
-        <Input placeholder="Поиск: имя, @username, телефон" value={q}
+        <Input placeholder="Поиск: имя или @username" value={q}
                onChange={(e) => { setQ(e.target.value); load(e.target.value); }} />
       </div>
 
@@ -48,7 +48,7 @@ export default function Users() {
           {subs.map((s) => (
             <div key={s.sub_id}>
               <Cell
-                subtitle={`${s.phone ?? ''} · до ${new Date(s.expires_at).toLocaleDateString('ru-RU')}`}
+                subtitle={`до ${new Date(s.expires_at).toLocaleDateString('ru-RU')}`}
                 after={
                   <Badge type="number" mode={s.payment_method === 'stars' ? 'primary' : 'gray'}>
                     {s.payment_method === 'stars' ? 'Stars' : 'Kaspi'}

@@ -70,7 +70,7 @@ export default function Overview() {
         {receipts.length === 0 && <Cell subtitle="Все заявки обработаны">Пусто</Cell>}
         {receipts.map((r) => (
           <div key={r.id} style={{ padding: '8px 16px' }}>
-            <Cell subtitle={`${r.phone ?? ''} · ${r.amount} ₸ · ${new Date(r.created_at).toLocaleString('ru-RU')}`}>
+            <Cell subtitle={`${r.amount} ₸ · ${new Date(r.created_at).toLocaleString('ru-RU')}`}>
               {r.full_name} {r.username ? `(@${r.username})` : ''}
             </Cell>
             {r.receipt_url && (

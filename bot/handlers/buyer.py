@@ -14,7 +14,7 @@ from aiogram import F, Router
 from aiogram.filters import CommandObject, CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Contact, Message
+from aiogram.types import CallbackQuery, Message
 
 from bot import db
 from bot.config import settings
@@ -23,7 +23,6 @@ from bot.keyboards import (
     help_kb,
     main_menu_kb,
     notify_toggle_kb,
-    phone_kb,
     receipt_decision_kb,
 )
 from bot.services import payments, qr, redemption, storage
@@ -37,7 +36,6 @@ TICK_SECONDS = 10     # период обновления «тикающих ч�
 
 class Onboarding(StatesGroup):
     consent = State()
-    phone = State()
 
 
 class HelpContact(StatesGroup):
@@ -78,31 +76,27 @@ async def cmd_start(message: Message, command: CommandObject, state: FSMContext)
 
 @router.message(Onboarding.consent, F.text)
 async def onboarding_consent(message: Message, state: FSMContext) -> None:
+    """Один тап «Продолжить» = акцепт условий → сразу регистрация.
+
+    Телефон не собираем: Kaspi не показывает номер плательщика, сверка чеков
+    идёт по сумме/времени/имени — номер в ней не участвует.
+    """
     lang = settings.default_lang
     if message.text != t("btn_consent", lang):
         # Без согласия дальше нельзя (раздел 3.6).
         await message.answer(t("ask_consent", lang), reply_markup=consent_kb(lang))
         return
-    await state.set_state(Onboarding.phone)
-    await message.answer(t("ask_phone", lang), reply_markup=phone_kb(lang))
 
-
-@router.message(Onboarding.phone, F.contact)
-async def onboarding_phone(message: Message, state: FSMContext) -> None:
-    lang = settings.default_lang
-    contact: Contact = message.contact
     data = await state.get_data()
-
     await db.execute(
         """
-        INSERT INTO users (id, username, full_name, phone, referrer_id, lang)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        ON CONFLICT (id) DO UPDATE SET phone = EXCLUDED.phone
+        INSERT INTO users (id, username, full_name, referrer_id, lang)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (id) DO NOTHING
         """,
         message.from_user.id,
         message.from_user.username,
         message.from_user.full_name,
-        contact.phone_number,
         data.get("referrer_id"),
         lang,
     )

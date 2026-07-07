@@ -33,14 +33,6 @@ def consent_kb(lang: str = "ru") -> ReplyKeyboardMarkup:
     )
 
 
-def phone_kb(lang: str = "ru") -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text=t("btn_share_phone", lang), request_contact=True)]],
-        resize_keyboard=True,
-        one_time_keyboard=True,
-    )
-
-
 def main_menu_kb(lang: str = "ru") -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[

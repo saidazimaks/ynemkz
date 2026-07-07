@@ -38,7 +38,7 @@ export default function Profile({ me, onChange }: {
   if (me === null)
     return (
       <Placeholder header="Нужна регистрация"
-                   description="Запустите бота и поделитесь номером — затем возвращайтесь."
+                   description="Нажмите Start в боте — регистрация в один тап, затем возвращайтесь."
                    action={BOT && (
                      <Button onClick={() => { try { openTelegramLink(`https://t.me/${BOT}`); } catch { /* dev */ } }}>
                        Открыть бота

@@ -92,7 +92,7 @@ export default function Activate() {
     return (
       <Placeholder
         header="Почти готово!"
-        description="Зарегистрируйтесь в боте (телефон + согласие) — скидка активируется сразу после."
+        description="Нажмите Start в боте — регистрация в один тап, скидка активируется сразу после."
         action={botUsername && (
           <Button onClick={() => { try { openTelegramLink(link); } catch { window.open(link); } }}>
             Зарегистрироваться

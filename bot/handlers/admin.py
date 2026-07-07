@@ -216,7 +216,7 @@ async def list_subs(message: Message, role: str) -> None:
         return
     rows = await db.fetch(
         """
-        SELECT u.full_name, u.phone, s.expires_at
+        SELECT u.full_name, s.expires_at
         FROM subscriptions s JOIN users u ON u.id = s.user_id
         WHERE s.status = 'active' AND s.expires_at > now()
         ORDER BY s.expires_at
@@ -225,7 +225,7 @@ async def list_subs(message: Message, role: str) -> None:
     if not rows:
         await message.answer("Активных подписчиков нет.")
         return
-    lines = [f"• {r['full_name']} ({r['phone']}) — до {r['expires_at']:%d.%m.%Y}" for r in rows]
+    lines = [f"• {r['full_name']} — до {r['expires_at']:%d.%m.%Y}" for r in rows]
     await message.answer("👥 Подписчики:\n" + "\n".join(lines))
 
 
