@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     # Telegram
     bot_token: str = Field(alias="BOT_TOKEN")
     admin_ids: str = Field(default="", alias="ADMIN_IDS")  # "111,222"
+    # Секрет команды /admin_access <секрет>; пусто = команда отключена
+    admin_secret: str = Field(default="", alias="ADMIN_SECRET")
 
     # Supabase / Postgres
     supabase_url: str = Field(alias="SUPABASE_URL")

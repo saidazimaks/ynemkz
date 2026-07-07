@@ -1,6 +1,10 @@
 """Админ (в боте, раздел 3.5): партнёры, скидка дня, подписчики, заявки, рассылка."""
 from __future__ import annotations
 
+import contextlib
+import hmac
+import logging
+
 from aiogram import F, Router
 from aiogram.filters import Command, CommandObject
 from aiogram.fsm.context import FSMContext
@@ -8,15 +12,61 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 
 from bot import db
+from bot.config import settings
 from bot.keyboards import broadcast_confirm_kb
 from bot.services import broadcast, payments, qr
 from bot.texts import t
 
+log = logging.getLogger(__name__)
 router = Router(name="admin")
 
 
 class BroadcastFlow(StatesGroup):
     confirm = State()
+
+
+@router.message(Command("admin_access"))
+async def grant_admin(message: Message, role: str, command: CommandObject) -> None:
+    """Выдача роли admin по секрету: /admin_access <ADMIN_SECRET>.
+
+    Секрет в env; пусто — команда отключена. На неверный секрет молчим
+    (не подтверждаем существование команды). Сообщение с секретом удаляем.
+    """
+    secret = (command.args or "").strip()
+    # Секрет не должен оставаться в истории чата
+    with contextlib.suppress(Exception):
+        await message.delete()
+
+    if not settings.admin_secret or not secret:
+        return
+    if not hmac.compare_digest(secret, settings.admin_secret):
+        log.warning("admin_access: неверный секрет от %s", message.from_user.id)
+        return
+    if role == "admin":
+        await message.answer("Вы уже админ. Меню: /admin")
+        return
+
+    await db.execute(
+        """
+        INSERT INTO users (id, username, full_name, role)
+        VALUES ($1, $2, $3, 'admin')
+        ON CONFLICT (id) DO UPDATE SET role = 'admin'
+        """,
+        message.from_user.id,
+        message.from_user.username,
+        message.from_user.full_name,
+    )
+    log.info("admin_access: роль admin выдана %s", message.from_user.id)
+    await message.answer("✅ Роль admin выдана. Меню: /admin")
+
+    # Аудит: уведомить остальных админов
+    for admin_id in settings.admin_id_set - {message.from_user.id}:
+        with contextlib.suppress(Exception):
+            await message.bot.send_message(
+                admin_id,
+                f"⚠️ Новый админ через /admin_access: {message.from_user.full_name} "
+                f"(@{message.from_user.username}, id {message.from_user.id})",
+            )
 
 
 @router.message(Command("admin"))
