@@ -17,6 +17,16 @@ from bot.texts import t
 
 router = APIRouter()
 
+# Ссылки на фоновые задачи: без них garbage collector может убить task на лету.
+_bg_tasks: set[asyncio.Task] = set()
+
+
+def _spawn(coro) -> asyncio.Task:
+    task = asyncio.create_task(coro)
+    _bg_tasks.add(task)
+    task.add_done_callback(_bg_tasks.discard)
+    return task
+
 
 def _bot() -> Bot:
     """aiogram Bot без polling — для пингов и инвойсов из API."""
@@ -98,7 +108,7 @@ async def activate(body: ActivateBody, user: dict = Depends(get_user)) -> dict:
     partner = result["partner"]
     if partner["user_id"]:
         # Пинг партнёру — в фоне: клиент не должен ждать Telegram API
-        asyncio.create_task(_ping_partner(
+        _spawn(_ping_partner(
             partner["user_id"],
             t("partner_ping", name=user["full_name"] or "Клиент",
               discount=result["discount"], time=now.strftime("%H:%M")),
@@ -117,14 +127,17 @@ async def activate(body: ActivateBody, user: dict = Depends(get_user)) -> dict:
 
 @router.post("/stars-invoice")
 async def stars_invoice(user: dict = Depends(get_user)) -> dict:
-    """Ссылка на инвойс в Stars (XTR) — Mini App открывает её через openInvoice."""
-    if await payments.active_subscription(user["id"]):
-        raise HTTPException(409, "subscription already active")
+    """Ссылка на инвойс в Stars (XTR) — Mini App открывает её через openInvoice.
+
+    Активная подписка не блокирует оплату: продление стекуется — +30 дней
+    к текущему сроку (раздел 3.1).
+    """
     bot = _bot()
     try:
         link = await bot.create_invoice_link(
             title="Подписка Ynem",
-            description="Скидки 10–15% у всех партнёров на 30 дней",
+            description="Скидки 10–15% у всех партнёров на 30 дней "
+                        "(при активной подписке — продление, дни сложатся)",
             payload=f"sub:{user['id']}",
             currency="XTR",
             prices=[{"label": "Подписка на 30 дней",

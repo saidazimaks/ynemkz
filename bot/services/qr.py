@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import io
 import secrets
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 import qrcode
 
@@ -36,6 +37,10 @@ def partner_qr(bot_username: str, partner_id: int, app_name: str = "app") -> byt
 
 
 def daily_sign(day: date | None = None) -> str:
-    """Детерминированный знак дня — одинаковый у всех, меняется каждый день."""
-    day = day or date.today()
+    """Детерминированный знак дня — одинаковый у всех, меняется каждый день.
+
+    День считаем по Asia/Almaty, а не по TZ сервера: иначе знак «переключался»
+    бы среди рабочего дня или ночью не в полночь Экибастуза.
+    """
+    day = day or datetime.now(ZoneInfo("Asia/Almaty")).date()
     return _SIGNS[day.toordinal() % len(_SIGNS)]

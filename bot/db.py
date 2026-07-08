@@ -20,8 +20,15 @@ async def init_pool() -> asyncpg.Pool:
     global _pool
     if _pool is None:
         # min_size=4: параллельные запросы Mini App не ждут создания
-        # TLS-коннектов к Supabase pooler (дорого, особенно межрегионально)
-        _pool = await asyncpg.create_pool(settings.database_url, min_size=4, max_size=10)
+        # TLS-коннектов к Supabase pooler (дорого, особенно межрегионально).
+        # timezone: now()::date и подобные в SQL считаются локальным днём
+        # Экибастуза, а не UTC (скидка дня, лимиты, статистика).
+        _pool = await asyncpg.create_pool(
+            settings.database_url,
+            min_size=4,
+            max_size=10,
+            server_settings={"timezone": "Asia/Almaty"},
+        )
     return _pool
 
 

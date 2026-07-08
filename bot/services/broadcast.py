@@ -17,12 +17,16 @@ BATCH_PAUSE = 1.0  # секунда между батчами
 async def segment_ids(segment: str) -> list[int]:
     """Сегменты: all | subscribers | expired."""
     if segment == "subscribers":
-        q = """SELECT DISTINCT user_id FROM subscriptions
-               WHERE status = 'active' AND expires_at > now()"""
+        q = """SELECT DISTINCT s.user_id
+               FROM subscriptions s JOIN users u ON u.id = s.user_id
+               WHERE s.status = 'active' AND s.expires_at > now()
+                 AND NOT u.is_banned"""
     elif segment == "expired":
-        q = """SELECT DISTINCT user_id FROM subscriptions
-               WHERE status = 'expired'
-                  OR (status = 'active' AND expires_at <= now())"""
+        q = """SELECT DISTINCT s.user_id
+               FROM subscriptions s JOIN users u ON u.id = s.user_id
+               WHERE (s.status = 'expired'
+                      OR (s.status = 'active' AND s.expires_at <= now()))
+                 AND NOT u.is_banned"""
     else:
         q = "SELECT id FROM users WHERE is_banned = false"
     rows = await db.fetch(q)

@@ -7,11 +7,17 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import asyncpg
+
 from bot import db
 from bot.services import qr
 
 CODE_TTL = timedelta(minutes=30)      # фолбэк-код (вариант A)
 SCREEN_TTL = timedelta(minutes=5)     # экран активации (вариант C)
+
+# Атомарную гарантию лимита даёт уникальный индекс
+# uq_redemptions_user_partner_day (user_id, partner_id, issued_on) — миграция 003.
+_DAILY_LIMIT_MSG = "Вы уже активировали скидку у этого партнёра сегодня."
 
 
 class RedeemError(Exception):
@@ -19,17 +25,18 @@ class RedeemError(Exception):
 
 
 async def _check_daily_limit(user_id: int, partner_id: int) -> None:
+    """Быстрый pre-check; настоящая защита от гонки — уникальный индекс в issue()."""
     used = await db.fetchval(
         """
         SELECT count(*) FROM redemptions
         WHERE user_id = $1 AND partner_id = $2
-          AND issued_at::date = now()::date
+          AND issued_on = now()::date
         """,
         user_id,
         partner_id,
     )
     if used:
-        raise RedeemError("Вы уже активировали скидку у этого партнёра сегодня.")
+        raise RedeemError(_DAILY_LIMIT_MSG)
 
 
 async def issue(
@@ -51,22 +58,28 @@ async def issue(
 
     now = datetime.now(timezone.utc)
     code = qr.gen_code()
-    row = await db.fetchrow(
-        """
-        INSERT INTO redemptions (code, user_id, partner_id, type, status, issued_at, used_at, expires_at, discount)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        RETURNING *
-        """,
-        code,
-        user_id,
-        partner_id,
-        kind,
-        "used" if auto_use else "issued",
-        now,
-        now if auto_use else None,
-        now + (SCREEN_TTL if auto_use else CODE_TTL),
-        discount,
-    )
+    try:
+        row = await db.fetchrow(
+            """
+            INSERT INTO redemptions (code, user_id, partner_id, type, status, issued_at, used_at, expires_at, discount)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            RETURNING *
+            """,
+            code,
+            user_id,
+            partner_id,
+            kind,
+            "used" if auto_use else "issued",
+            now,
+            now if auto_use else None,
+            now + (SCREEN_TTL if auto_use else CODE_TTL),
+            discount,
+        )
+    except asyncpg.UniqueViolationError as e:
+        # Гонка двух параллельных активаций: лимит держит уникальный индекс.
+        if e.constraint_name == "uq_redemptions_user_partner_day":
+            raise RedeemError(_DAILY_LIMIT_MSG) from e
+        raise
     return dict(row)
 
 

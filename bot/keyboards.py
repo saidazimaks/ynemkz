@@ -70,7 +70,8 @@ def notify_toggle_kb(enabled: bool, lang: str = "ru") -> InlineKeyboardMarkup:
     """Переключатель утренних уведомлений + вход в Mini App."""
     key = "btn_notify_on" if enabled else "btn_notify_off"
     rows = [[InlineKeyboardButton(text=t(key, lang), callback_data="notify:toggle")]]
-    app_btn = miniapp_button("📱 Открыть приложение", "/profile")
+    # HashRouter в Mini App: путь только после «/#/», иначе 404 на статике.
+    app_btn = miniapp_button("📱 Открыть приложение", "/#/profile")
     if app_btn:
         rows.append([app_btn])
     return InlineKeyboardMarkup(inline_keyboard=rows)

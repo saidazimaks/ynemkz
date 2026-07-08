@@ -10,6 +10,7 @@ import asyncio
 import contextlib
 from datetime import datetime, timezone
 
+import asyncpg
 from aiogram import F, Router
 from aiogram.filters import CommandObject, CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
@@ -33,6 +34,16 @@ router = Router(name="buyer")
 SCREEN_SECONDS = 300  # экран активации живёт 5 минут (раздел 3.2)
 TICK_SECONDS = 10     # период обновления «тикающих часов»
 
+# Ссылки на фоновые задачи: без них garbage collector может убить task на лету.
+_bg_tasks: set[asyncio.Task] = set()
+
+
+def _spawn(coro) -> asyncio.Task:
+    task = asyncio.create_task(coro)
+    _bg_tasks.add(task)
+    task.add_done_callback(_bg_tasks.discard)
+    return task
+
 
 class Onboarding(StatesGroup):
     consent = State()
@@ -53,8 +64,15 @@ async def cmd_start(message: Message, command: CommandObject, state: FSMContext)
     user = await db.fetchrow("SELECT * FROM users WHERE id = $1", message.from_user.id)
 
     # Реферал: сохраняем в FSM, привяжем после регистрации.
+    # Битый/самореферальный линк не должен блокировать регистрацию (FK users).
     if payload.startswith("ref_") and user is None:
-        await state.update_data(referrer_id=_safe_int(payload[4:]))
+        ref_id = _safe_int(payload[4:])
+        if (
+            ref_id
+            and ref_id != message.from_user.id
+            and await db.fetchval("SELECT 1 FROM users WHERE id = $1", ref_id)
+        ):
+            await state.update_data(referrer_id=ref_id)
 
     if user is None:
         # Незарегистрирован → онбординг; deep link продолжим после.
@@ -88,19 +106,28 @@ async def onboarding_consent(message: Message, state: FSMContext) -> None:
         return
 
     data = await state.get_data()
-    await db.execute(
-        """
-        INSERT INTO users (id, username, full_name, referrer_id, lang)
-        VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (id) DO NOTHING
-        """,
-        message.from_user.id,
-        message.from_user.username,
-        message.from_user.full_name,
-        data.get("referrer_id"),
-        lang,
-    )
+    # Ранняя очистка: даже при ошибке ниже пользователь не застрянет в онбординге.
     await state.clear()
+
+    async def _register(referrer_id: int | None) -> None:
+        await db.execute(
+            """
+            INSERT INTO users (id, username, full_name, referrer_id, lang)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (id) DO NOTHING
+            """,
+            message.from_user.id,
+            message.from_user.username,
+            message.from_user.full_name,
+            referrer_id,
+            lang,
+        )
+
+    try:
+        await _register(data.get("referrer_id"))
+    except asyncpg.ForeignKeyViolationError:
+        # Реферер исчез между /start и согласием — регистрируем без него.
+        await _register(None)
     await message.answer(t("registered", lang), reply_markup=main_menu_kb(lang))
 
     # Продолжаем отложенный deep link активации.
@@ -149,7 +176,7 @@ async def _activate(message: Message, user: dict, partner_id: int | None) -> Non
     now = datetime.now(timezone.utc)
     screen = await message.answer(render(now))
     # Живые тикающие часы (анти-скриншот) + авто-истечение через 5 минут.
-    asyncio.create_task(_tick_screen(screen, render, lang))
+    _spawn(_tick_screen(screen, render, lang))
 
     # Пинг партнёру в реальном времени (раздел 3.2).
     if partner["user_id"]:
@@ -236,6 +263,9 @@ async def show_subscription(message: Message, db_user: dict | None) -> None:
         history = await _visit_history(message.from_user.id)
         if history:
             text += "\n\n" + t("sub_visits", lang) + "\n" + history
+        # Продление доступно до истечения — дни стекуются (раздел 3.1).
+        text += "\n\n" + t("sub_renew_hint", lang,
+                           price=settings.subscription_price, phone=settings.kaspi_phone)
         await message.answer(text, reply_markup=notify_toggle_kb(notify_on, lang))
     elif await payments.has_pending(message.from_user.id):
         await message.answer(t("sub_pending", lang), reply_markup=notify_toggle_kb(notify_on, lang))
@@ -279,11 +309,16 @@ async def toggle_notify(call: CallbackQuery) -> None:
 
 
 @router.message(StateFilter(None), F.photo)
-async def receive_receipt(message: Message) -> None:
-    """Приём скрина чека Kaspi (раздел 3.1)."""
+async def receive_receipt(message: Message, db_user: dict | None) -> None:
+    """Приём скрина чека Kaspi (раздел 3.1).
+
+    При активной подписке чек тоже принимается — это заявка на продление,
+    approve() стекует срок (+30 дней).
+    """
     lang = settings.default_lang
-    if await payments.active_subscription(message.from_user.id):
-        return  # подписка уже есть — фото не по делу
+    if db_user is None:
+        await message.answer(t("not_registered_hint", lang))
+        return
     if await payments.has_pending(message.from_user.id):
         await message.answer(t("pay_duplicate", lang))
         return
@@ -291,9 +326,15 @@ async def receive_receipt(message: Message) -> None:
     photo = message.photo[-1]
     file = await message.bot.get_file(photo.file_id)
     buf = await message.bot.download_file(file.file_path)
-    url = storage.upload_receipt(buf.read(), f"{message.from_user.id}_{photo.file_unique_id}.jpg")
+    # Синхронный SDK Supabase — не блокируем event loop.
+    url = await asyncio.to_thread(
+        storage.upload_receipt, buf.read(), f"{message.from_user.id}_{photo.file_unique_id}.jpg"
+    )
 
     sub = await payments.create_pending(message.from_user.id, url)
+    if sub is None:  # гонка двух фото подряд — заявка уже создана
+        await message.answer(t("pay_duplicate", lang))
+        return
     await message.answer(t("pay_received", lang))
 
     # Уведомление админам с карточкой чека.

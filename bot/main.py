@@ -28,9 +28,11 @@ async def main() -> None:
     )
     dp = Dispatcher(storage=MemoryStorage())
 
-    # Middleware авторизации на сообщения и колбэки.
-    dp.message.middleware(AuthMiddleware())
-    dp.callback_query.middleware(AuthMiddleware())
+    # Middleware авторизации на сообщения и колбэки. Именно outer:
+    # роль должна попадать в data ДО фильтров роутеров (MagicData в admin.py),
+    # inner-middleware выполняется уже после них.
+    dp.message.outer_middleware(AuthMiddleware())
+    dp.callback_query.outer_middleware(AuthMiddleware())
 
     setup_routers(dp)
 

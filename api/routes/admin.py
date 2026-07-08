@@ -14,8 +14,19 @@ from bot import db
 from bot.config import settings
 from bot.services import broadcast as broadcast_svc
 from bot.services import payments, qr
+from bot.texts import t
 
 router = APIRouter(dependencies=[Depends(require_role("admin"))])
+
+# Ссылки на фоновые задачи: без них garbage collector может убить task на лету.
+_bg_tasks: set[asyncio.Task] = set()
+
+
+def _spawn(coro) -> asyncio.Task:
+    task = asyncio.create_task(coro)
+    _bg_tasks.add(task)
+    task.add_done_callback(_bg_tasks.discard)
+    return task
 
 _bot_username: str | None = None
 
@@ -60,14 +71,14 @@ async def decide(sub_id: int, body: DecideBody,
     with contextlib.suppress(Exception):
         await bot.send_message(
             sub["user_id"],
-            "✅ Подписка активна на 30 дней!" if body.approve
+            t("sub_approved", date=f"{sub['expires_at']:%d.%m.%Y}") if body.approve
             else "❌ Заявка отклонена. Проверьте чек и попробуйте снова.",
         )
     if body.approve:
         referrer_id = await payments.apply_referral_bonus(sub["user_id"])
         if referrer_id:
             with contextlib.suppress(Exception):
-                await bot.send_message(referrer_id, "🎉 Ваш друг оформил подписку — вам +7 дней!")
+                await bot.send_message(referrer_id, t("referral_bonus"))
     await bot.session.close()
     return {"ok": True}
 
@@ -284,5 +295,5 @@ async def do_broadcast(body: BroadcastBody) -> dict:
     if body.dry_run:
         return {"recipients": recipients, "sent": False}
     # Батчи по 25 msg/сек — может идти минуты, не держим запрос
-    asyncio.create_task(_send_broadcast(body.text, body.segment))
+    _spawn(_send_broadcast(body.text, body.segment))
     return {"recipients": recipients, "sent": True}

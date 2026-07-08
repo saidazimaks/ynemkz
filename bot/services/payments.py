@@ -3,6 +3,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
+import asyncpg
+
 from bot import db
 from bot.config import settings
 
@@ -18,32 +20,43 @@ async def has_pending(user_id: int) -> bool:
     return bool(n)
 
 
-async def create_pending(user_id: int, receipt_url: str) -> dict:
-    row = await db.fetchrow(
-        """
-        INSERT INTO subscriptions (user_id, status, receipt_url, amount)
-        VALUES ($1, 'pending', $2, $3)
-        RETURNING *
-        """,
-        user_id,
-        receipt_url,
-        settings.subscription_price,
-    )
+async def create_pending(user_id: int, receipt_url: str) -> dict | None:
+    """Создать pending-заявку. None — заявка уже на проверке (частичный
+    уникальный индекс uq_subscriptions_one_pending, миграция 003)."""
+    try:
+        row = await db.fetchrow(
+            """
+            INSERT INTO subscriptions (user_id, status, receipt_url, amount)
+            VALUES ($1, 'pending', $2, $3)
+            RETURNING *
+            """,
+            user_id,
+            receipt_url,
+            settings.subscription_price,
+        )
+    except asyncpg.UniqueViolationError:
+        return None
     return dict(row)
 
 
 async def approve(subscription_id: int, admin_id: int) -> dict | None:
+    """Подтвердить pending-заявку. Если у пользователя уже есть активная
+    подписка — это продление: срок стекуется, expires_at =
+    GREATEST(текущий expires_at, now()) + 30 дней (раздел 3.1)."""
     now = datetime.now(timezone.utc)
     row = await db.fetchrow(
         """
-        UPDATE subscriptions
-        SET status = 'active', paid_at = $2, expires_at = $3, confirmed_by = $4
-        WHERE id = $1 AND status = 'pending'
+        UPDATE subscriptions s
+        SET status = 'active', paid_at = $2, confirmed_by = $3,
+            expires_at = coalesce(
+                (SELECT max(expires_at) FROM subscriptions
+                 WHERE user_id = s.user_id AND status = 'active' AND expires_at > $2),
+                $2) + interval '30 days'
+        WHERE s.id = $1 AND s.status = 'pending'
         RETURNING *
         """,
         subscription_id,
         now,
-        now + SUB_PERIOD,
         admin_id,
     )
     return dict(row) if row else None
@@ -62,22 +75,59 @@ async def reject(subscription_id: int, admin_id: int) -> dict | None:
     return dict(row) if row else None
 
 
-async def approve_stars(user_id: int, charge_id: str, amount_stars: int) -> dict:
-    """Оплата Telegram Stars: подписка активируется мгновенно, без админа."""
+async def approve_stars(user_id: int, charge_id: str, amount_stars: int) -> dict | None:
+    """Оплата Telegram Stars: подписка активируется мгновенно, без админа.
+
+    Идемпотентность: charge_id уникален (индекс uq_subscriptions_tg_charge_id,
+    миграция 003) — повторная доставка successful_payment возвращает None,
+    вторая подписка не создаётся. При активной подписке — продление со
+    стекингом: expires_at = GREATEST(expires_at, now()) + 30 дней (раздел 3.1).
+    """
     now = datetime.now(timezone.utc)
+
+    # Повторная доставка: этот платёж уже учтён.
+    dup = await db.fetchval(
+        "SELECT 1 FROM subscriptions WHERE tg_charge_id = $1", charge_id
+    )
+    if dup:
+        return None
+
+    # Продление: активная подписка стекуется, вторая строка не создаётся.
     row = await db.fetchrow(
         """
-        INSERT INTO subscriptions (user_id, status, amount, paid_at, expires_at,
-                                   payment_method, tg_charge_id)
-        VALUES ($1, 'active', $2, $3, $4, 'stars', $5)
+        UPDATE subscriptions
+        SET expires_at = GREATEST(expires_at, $2) + interval '30 days',
+            paid_at = $2, amount = $3, payment_method = 'stars', tg_charge_id = $4
+        WHERE id = (SELECT id FROM subscriptions
+                    WHERE user_id = $1 AND status = 'active' AND expires_at > $2
+                    ORDER BY expires_at DESC LIMIT 1)
+          AND tg_charge_id IS DISTINCT FROM $4
         RETURNING *
         """,
         user_id,
-        amount_stars,
         now,
-        now + SUB_PERIOD,
+        amount_stars,
         charge_id,
     )
+    if row:
+        return dict(row)
+
+    try:
+        row = await db.fetchrow(
+            """
+            INSERT INTO subscriptions (user_id, status, amount, paid_at, expires_at,
+                                       payment_method, tg_charge_id)
+            VALUES ($1, 'active', $2, $3, $4, 'stars', $5)
+            RETURNING *
+            """,
+            user_id,
+            amount_stars,
+            now,
+            now + SUB_PERIOD,
+            charge_id,
+        )
+    except asyncpg.UniqueViolationError:
+        return None  # гонка повторной доставки — платёж уже учтён
     return dict(row)
 
 
@@ -85,22 +135,32 @@ async def refund_stars(bot, subscription_id: int) -> dict:
     """Возврат Stars-платежа: звёзды назад, подписка гаснет. Бросает ValueError.
 
     bot — aiogram Bot (у бота свой, у API — временный без polling).
+    Порядок атомарный: сначала гасим подписку (UPDATE ... WHERE status='active' —
+    параллельный /refund получит «уже возвращена»), затем возврат в Telegram;
+    при ошибке Telegram откатываем статус обратно в active.
     """
     sub = await db.fetchrow(
         """
-        SELECT * FROM subscriptions
-        WHERE id = $1 AND payment_method = 'stars' AND tg_charge_id IS NOT NULL
-          AND status != 'refunded'
+        UPDATE subscriptions SET status = 'refunded'
+        WHERE id = $1 AND status = 'active'
+          AND payment_method = 'stars' AND tg_charge_id IS NOT NULL
+        RETURNING *
         """,
         subscription_id,
     )
     if sub is None:
-        raise ValueError("Заявка не найдена, не Stars-платёж или уже возвращена.")
-    await bot.refund_star_payment(
-        user_id=sub["user_id"],
-        telegram_payment_charge_id=sub["tg_charge_id"],
-    )
-    await db.execute("UPDATE subscriptions SET status = 'refunded' WHERE id = $1", sub["id"])
+        raise ValueError("Заявка не найдена, не Stars-платёж или уже возвращена/не активна.")
+    try:
+        await bot.refund_star_payment(
+            user_id=sub["user_id"],
+            telegram_payment_charge_id=sub["tg_charge_id"],
+        )
+    except Exception:
+        # Telegram отклонил возврат — подписка остаётся активной.
+        await db.execute(
+            "UPDATE subscriptions SET status = 'active' WHERE id = $1", sub["id"]
+        )
+        raise
     return dict(sub)
 
 

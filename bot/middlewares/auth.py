@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import Any, Awaitable, Callable
 
 from aiogram import BaseMiddleware
-from aiogram.types import TelegramObject, User
+from aiogram.types import Message, TelegramObject, User
 
 from bot import db
 from bot.config import settings
@@ -28,7 +28,11 @@ class AuthMiddleware(BaseMiddleware):
         row = await db.fetchrow("SELECT * FROM users WHERE id = $1", tg_user.id)
 
         if row is not None and row["is_banned"]:
-            return  # молча игнорируем забаненных
+            # successful_payment пропускаем даже для забаненных: деньги уже
+            # списаны, платёж обязан быть учтён (bot/handlers/stars.py).
+            is_payment = isinstance(event, Message) and event.successful_payment
+            if not is_payment:
+                return  # молча игнорируем забаненных
 
         role = row["role"] if row else "buyer"
         if tg_user.id in settings.admin_id_set:

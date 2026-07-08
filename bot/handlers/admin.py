@@ -1,12 +1,15 @@
 """Админ (в боте, раздел 3.5): партнёры, скидка дня, подписчики, заявки, рассылка."""
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import hmac
 import logging
+from datetime import date
 
 from aiogram import F, Router
-from aiogram.filters import Command, CommandObject
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.filters import Command, CommandObject, MagicData
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
@@ -18,14 +21,29 @@ from bot.services import broadcast, payments, qr
 from bot.texts import t
 
 log = logging.getLogger(__name__)
+
+# Роутер закрыт фильтром по роли (data кладёт AuthMiddleware, outer):
+# апдейты не-админов проходят мимо — /stats партнёра доходит до partner-роутера.
 router = Router(name="admin")
+router.message.filter(MagicData(F.role == "admin"))
+router.callback_query.filter(MagicData(F.role == "admin"))
+
+# /admin_access доступен любому (иначе роль admin не получить) — отдельный роутер.
+access_router = Router(name="admin_access")
 
 
 class BroadcastFlow(StatesGroup):
     confirm = State()
 
 
-@router.message(Command("admin_access"))
+def _safe_int(s: str) -> int | None:
+    try:
+        return int(s)
+    except (TypeError, ValueError):
+        return None
+
+
+@access_router.message(Command("admin_access"))
 async def grant_admin(message: Message, role: str, command: CommandObject) -> None:
     """Выдача роли admin по секрету: /admin_access <ADMIN_SECRET>.
 
@@ -94,10 +112,11 @@ async def add_partner(message: Message, role: str, command: CommandObject) -> No
     if role != "admin":
         return
     parts = (command.args or "").split(maxsplit=1)
-    if len(parts) < 2:
+    tg_id = _safe_int(parts[0]) if parts else None
+    if len(parts) < 2 or tg_id is None:
         await message.answer("Формат: /add_partner <tg_id> <название>")
         return
-    tg_id, name = int(parts[0]), parts[1]
+    name = parts[1]
     # Заводим пользователя (если нет) и повышаем роль до partner.
     await db.execute(
         """INSERT INTO users (id, role) VALUES ($1, 'partner')
@@ -147,7 +166,7 @@ async def set_logo(message: Message, role: str) -> None:
     photo = message.photo[-1]
     file = await message.bot.get_file(photo.file_id)
     buf = await message.bot.download_file(file.file_path)
-    url = storage.upload_logo(buf.read(), pid)
+    url = await asyncio.to_thread(storage.upload_logo, buf.read(), pid)  # синхронный SDK
     await db.execute("UPDATE partners SET logo_url = $2 WHERE id = $1", pid, url)
     await message.answer(f"🖼 Логотип партнёра #{pid} обновлён.")
 
@@ -179,10 +198,10 @@ async def refund_stars(message: Message, role: str, command: CommandObject) -> N
 async def partner_qr(message: Message, role: str, command: CommandObject) -> None:
     if role != "admin":
         return
-    if not command.args:
+    pid = _safe_int((command.args or "").strip())
+    if pid is None:
         await message.answer("Формат: /qr <partner_id>")
         return
-    pid = int(command.args.strip())
     me = await message.bot.get_me()
     png = qr.partner_qr(me.username, pid)
     from aiogram.types import BufferedInputFile
@@ -197,17 +216,25 @@ async def set_daily_deal(message: Message, role: str, command: CommandObject) ->
     if role != "admin":
         return
     parts = (command.args or "").split()
-    if len(parts) < 2:
-        await message.answer("Формат: /deal <partner_id> <YYYY-MM-DD>")
+    pid = _safe_int(parts[0]) if parts else None
+    try:
+        deal_date = date.fromisoformat(parts[1]) if len(parts) > 1 else None
+    except ValueError:
+        deal_date = None
+    if pid is None or deal_date is None:
+        await message.answer("Формат: /deal <partner_id> <YYYY-MM-DD>, например /deal 3 2026-07-15")
         return
-    pid, deal_date = int(parts[0]), parts[1]
+    exists = await db.fetchval("SELECT 1 FROM partners WHERE id = $1", pid)
+    if not exists:
+        await message.answer(f"Партнёр #{pid} не найден.")
+        return
     await db.execute(
         """INSERT INTO daily_deals (partner_id, deal_date) VALUES ($1, $2)
            ON CONFLICT (deal_date) DO UPDATE SET partner_id = EXCLUDED.partner_id""",
         pid,
         deal_date,
     )
-    await message.answer(f"✅ Скидка дня на {deal_date} → партнёр #{pid}")
+    await message.answer(f"✅ Скидка дня на {deal_date:%Y-%m-%d} → партнёр #{pid}")
 
 
 @router.message(Command("subs"))
@@ -263,28 +290,37 @@ async def decide_receipt(call: CallbackQuery, role: str) -> None:
     if action == "ok":
         sub = await payments.approve(sub_id, call.from_user.id)
         if sub:
-            await call.message.edit_caption(caption=(call.message.caption or "") + "\n\n✅ Подтверждено")
-            try:
-                await call.bot.send_message(sub["user_id"], "✅ Подписка активна на 30 дней!")
-            except Exception:  # noqa: BLE001
-                pass
+            with contextlib.suppress(Exception):
+                await call.bot.send_message(
+                    sub["user_id"], t("sub_approved", date=f"{sub['expires_at']:%d.%m.%Y}")
+                )
             # Реферальный бонус: первый платёж друга → рефереру +7 дней (раздел 3.6).
             referrer_id = await payments.apply_referral_bonus(sub["user_id"])
             if referrer_id:
-                try:
+                with contextlib.suppress(Exception):
                     await call.bot.send_message(referrer_id, t("referral_bonus"))
-                except Exception:  # noqa: BLE001
-                    pass
+            # Пометка на карточке — в конце и независимо: карточка из /receipts
+            # текстовая (edit_text), из уведомления — с фото (edit_caption).
+            await _mark_receipt_card(call.message, "\n\n✅ Подтверждено")
         await call.answer("Подтверждено")
     else:
         sub = await payments.reject(sub_id, call.from_user.id)
         if sub:
-            await call.message.edit_caption(caption=(call.message.caption or "") + "\n\n❌ Отклонено")
-            try:
-                await call.bot.send_message(sub["user_id"], "❌ Заявка отклонена. Проверьте чек и попробуйте снова.")
-            except Exception:  # noqa: BLE001
-                pass
+            with contextlib.suppress(Exception):
+                await call.bot.send_message(
+                    sub["user_id"], "❌ Заявка отклонена. Проверьте чек и попробуйте снова."
+                )
+            await _mark_receipt_card(call.message, "\n\n❌ Отклонено")
         await call.answer("Отклонено")
+
+
+async def _mark_receipt_card(msg: Message, mark: str) -> None:
+    """Дописать вердикт на карточку чека — не роняя хэндлер, если не вышло."""
+    with contextlib.suppress(TelegramBadRequest):
+        if msg.photo:
+            await msg.edit_caption(caption=(msg.caption or "") + mark)
+        else:
+            await msg.edit_text((msg.text or "") + mark)
 
 
 @router.message(Command("stats"))
