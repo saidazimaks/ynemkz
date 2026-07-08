@@ -16,15 +16,22 @@ const MapPage = lazy(() => import('./pages/Map'));
 const PartnerCabinet = lazy(() => import('./pages/PartnerCabinet'));
 const Admin = lazy(() => import('./pages/admin'));
 
-/** startapp=p_123 (наклейка на кассе) → сразу экран активации. */
+/** startapp=p_123 (наклейка на кассе) → сразу экран активации.
+ *  Telegram кладёт параметры запуска во фрагмент URL (#tgWebAppData=...),
+ *  а HashRouter считает фрагмент маршрутом — без нормализации первый рендер
+ *  попадает на несуществующий путь и экран пуст. */
 function StartParamRedirect() {
   const navigate = useNavigate();
   useEffect(() => {
     try {
       const { tgWebAppStartParam } = retrieveLaunchParams();
       const m = /^p_(\d+)$/.exec(tgWebAppStartParam ?? '');
-      if (m) navigate(`/activate/${m[1]}`, { replace: true });
+      if (m) {
+        navigate(`/activate/${m[1]}`, { replace: true });
+        return;
+      }
     } catch { /* вне Telegram */ }
+    if (window.location.hash.includes('tgWebApp')) navigate('/', { replace: true });
   }, [navigate]);
   return null;
 }
@@ -109,6 +116,8 @@ export default function App() {
           <Route path="/profile" element={<Profile me={me} onChange={onChange} />} />
           <Route path="/cabinet" element={<PartnerCabinet />} />
           <Route path="/admin" element={<Admin />} />
+          {/* Фолбэк: незнакомый путь (в т.ч. служебный фрагмент Telegram) → главная */}
+          <Route path="*" element={<Home />} />
         </Routes>
       </Suspense>
       <Nav role={me?.role ?? null} />
