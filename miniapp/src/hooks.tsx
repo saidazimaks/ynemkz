@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { backButton, mainButton } from '@telegram-apps/sdk-react';
 import { Button, Placeholder, Spinner } from '@telegram-apps/telegram-ui';
-import { apiGet, readCache } from './api';
+import { ApiError, apiGet, readCache } from './api';
 
 const BRAND_BG = '#ff8a1e';
 const BRAND_FG = '#ffffff';
@@ -63,9 +63,11 @@ export function useBackButton(onBack: () => void) {
 /** GET с кэшем: undefined — грузится впервые, null — ошибка без кэша.
  *  Из sessionStorage отдаёт мгновенно; сеть — через apiGet, т.е. свежий
  *  (моложе TTL) ответ берётся из памяти без повторного запроса.
- *  Второй элемент кортежа — retry: сбрасывает ошибку в «загрузку» и повторяет запрос. */
-export function useCachedApi<T>(path: string): [T | null | undefined, () => void] {
+ *  Второй элемент кортежа — retry: сбрасывает ошибку в «загрузку» и повторяет запрос.
+ *  Третий — HTTP-статус последней ошибки (403 — не зарегистрирован, 0 — нет сети). */
+export function useCachedApi<T>(path: string): [T | null | undefined, () => void, number | null] {
   const [data, setData] = useState<T | null | undefined>(() => readCache<T>(path));
+  const [errStatus, setErrStatus] = useState<number | null>(null);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
@@ -74,10 +76,12 @@ export function useCachedApi<T>(path: string): [T | null | undefined, () => void
     apiGet<T>(path, { force: attempt > 0 })
       .then((fresh) => {
         if (!alive) return;
+        setErrStatus(null);
         setData(fresh);
       })
-      .catch(() => {
+      .catch((e: unknown) => {
         if (!alive) return;
+        setErrStatus(e instanceof ApiError ? e.status : 0);
         setData((d) => (d === undefined ? null : d));
       });
     return () => { alive = false; };
@@ -88,7 +92,7 @@ export function useCachedApi<T>(path: string): [T | null | undefined, () => void
     setAttempt((n) => n + 1);
   }, []);
 
-  return [data, retry];
+  return [data, retry, errStatus];
 }
 
 /** Плавный набег числа (ease-out, ~0.9 c) — для суммы «Вы сэкономили». */

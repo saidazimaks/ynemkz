@@ -621,3 +621,58 @@ button, input, textarea, select {
   background: var(--vg-grad);
   opacity: 0.85;
 }
+
+/* --- Лендинг клуба (главная: гость и без подписки) -------------- */
+
+.vg-land {
+  margin-top: 14px;
+  padding: 18px 16px 16px;
+  border-radius: var(--vg-radius);
+  background: var(--tgui--section_bg_color, var(--tgui--secondary_bg_color, #f4f4f7));
+  border: 1px solid var(--tgui--outline, rgba(0, 0, 0, 0.06));
+}
+.vg-land-title {
+  font-family: var(--vg-font-display);
+  font-weight: 800;
+  font-size: 19px;
+  line-height: 1.25;
+  color: var(--tgui--text_color, #000);
+}
+.vg-land-sub {
+  margin-top: 8px;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--tgui--hint_color, #8a8a8e);
+}
+.vg-land-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 14px 0 16px;
+}
+.vg-land-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13.5px;
+  color: var(--tgui--text_color, #000);
+}
+.vg-land-step > span {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--vg-grad);
+  color: #fff;
+  font-family: var(--vg-font-display);
+  font-weight: 700;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.vg-land-cta {
+  display: flex;
+  gap: 8px;
+}
+.vg-land-cta > button:last-child { flex: 0 0 34%; }

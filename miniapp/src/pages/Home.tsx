@@ -1,8 +1,51 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Input } from '@telegram-apps/telegram-ui';
-import { type DailyDeal, type Partner } from './../api';
+import { openTelegramLink } from '@telegram-apps/sdk-react';
+import { Button, Input } from '@telegram-apps/telegram-ui';
+import { type DailyDeal, type Me, type Partner } from './../api';
 import { ErrorState, useCachedApi } from './../hooks';
+
+const BOT = import.meta.env.VITE_BOT_USERNAME as string | undefined;
+
+/** Лендинг клуба: питч + «как это работает» + CTA.
+ *  guest — не зарегистрирован (каталог отдал 403): единственный CTA — запустить бота. */
+function Landing({ guest, partners }: { guest?: boolean; partners?: Partner[] }) {
+  const navigate = useNavigate();
+  const maxPct = Math.max(15, ...(partners ?? []).map((p) => p.discount_premium));
+  const botLink = `https://t.me/${BOT}`;
+
+  return (
+    <div className="vg-land">
+      <div className="vg-land-title">Одна подписка — скидки каждый день</div>
+      <div className="vg-land-sub">
+        Ynem — дисконт-клуб Экибастуза: до −{maxPct}% у партнёров города по подписке,
+        а скидка дня — бесплатно для всех.
+      </div>
+      <div className="vg-land-steps">
+        <div className="vg-land-step"><span>1</span>Сканируете QR-наклейку на кассе заведения</div>
+        <div className="vg-land-step"><span>2</span>Показываете экран активации кассиру</div>
+        <div className="vg-land-step"><span>3</span>Скидка применяется сразу же</div>
+      </div>
+      {guest ? (
+        BOT && (
+          <Button size="l" stretched
+                  onClick={() => { try { openTelegramLink(botLink); } catch { window.open(botLink); } }}>
+            Запустить бота и вступить в клуб
+          </Button>
+        )
+      ) : (
+        <div className="vg-land-cta">
+          <Button size="l" stretched onClick={() => navigate('/profile')}>
+            Оформить подписку
+          </Button>
+          <Button size="l" stretched mode="bezeled" onClick={() => navigate('/map')}>
+            Карта
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Logo({ src, name }: { src: string | null; name: string }) {
   // lazy — логотипы ниже экрана не качаются, пока не доскроллили;
@@ -16,7 +59,9 @@ function Logo({ src, name }: { src: string | null; name: string }) {
 export default function Home() {
   const navigate = useNavigate();
   const [deal] = useCachedApi<DailyDeal | null>('/daily-deal');
-  const [partners, retryPartners] = useCachedApi<Partner[]>('/catalog');
+  const [partners, retryPartners, catalogErr] = useCachedApi<Partner[]>('/catalog');
+  // /me уже запрошен в App — здесь ответ придёт из кэша без второго запроса
+  const [me] = useCachedApi<Me>('/me');
   const [category, setCategory] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
@@ -46,6 +91,18 @@ export default function Home() {
       </div>
     );
 
+  // Не зарегистрирован (403) — лендинг клуба с единственным шагом: запустить бота
+  if (partners === null && catalogErr === 403)
+    return (
+      <div className="vg-page vg-stagger">
+        {brand}
+        <Landing guest />
+        <div className="vg-empty">
+          Каталог и карта заведений откроются после быстрой регистрации в боте.
+        </div>
+      </div>
+    );
+
   // Каталог не загрузился и кэша нет — честная ошибка с повтором
   if (partners === null)
     return (
@@ -72,6 +129,9 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* Лендинг — пока нет активной подписки; подписчику питч не нужен */}
+      {me?.subscription.active !== true && <Landing partners={partners} />}
 
       <div className="vg-h">Каталог</div>
 
