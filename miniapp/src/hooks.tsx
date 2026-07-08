@@ -1,8 +1,10 @@
-/** Интеграция с Telegram (MainButton/BackButton) и загрузка с кэшем.
+/** Интеграция с Telegram (MainButton/BackButton), загрузка с кэшем
+ *  и общие состояния экранов (Loader / ErrorState / PageSkeleton).
  *  Все вызовы SDK в try/catch — в браузере без Telegram хуки тихо бездействуют. */
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { backButton, mainButton } from '@telegram-apps/sdk-react';
-import { api, readCache, writeCache } from './api';
+import { Button, Placeholder, Spinner } from '@telegram-apps/telegram-ui';
+import { apiGet, readCache } from './api';
 
 const BRAND_BG = '#ff8a1e';
 const BRAND_FG = '#ffffff';
@@ -59,26 +61,34 @@ export function useBackButton(onBack: () => void) {
 }
 
 /** GET с кэшем: undefined — грузится впервые, null — ошибка без кэша.
- *  Из sessionStorage отдаёт мгновенно, свежее подтягивает фоном. */
-export function useCachedApi<T>(path: string): T | null | undefined {
+ *  Из sessionStorage отдаёт мгновенно; сеть — через apiGet, т.е. свежий
+ *  (моложе TTL) ответ берётся из памяти без повторного запроса.
+ *  Второй элемент кортежа — retry: сбрасывает ошибку в «загрузку» и повторяет запрос. */
+export function useCachedApi<T>(path: string): [T | null | undefined, () => void] {
   const [data, setData] = useState<T | null | undefined>(() => readCache<T>(path));
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let alive = true;
-    api<T>(path)
+    // attempt > 0 — пользователь нажал «Повторить»: идём в сеть мимо кэша
+    apiGet<T>(path, { force: attempt > 0 })
       .then((fresh) => {
         if (!alive) return;
         setData(fresh);
-        writeCache(path, fresh);
       })
       .catch(() => {
         if (!alive) return;
         setData((d) => (d === undefined ? null : d));
       });
     return () => { alive = false; };
-  }, [path]);
+  }, [path, attempt]);
 
-  return data;
+  const retry = useCallback(() => {
+    setData((d) => (d === null ? undefined : d)); // ошибка → снова скелетон
+    setAttempt((n) => n + 1);
+  }, []);
+
+  return [data, retry];
 }
 
 /** Плавный набег числа (ease-out, ~0.9 c) — для суммы «Вы сэкономили». */
@@ -114,6 +124,36 @@ export function PageSkeleton() {
       {Array.from({ length: 4 }, (_, i) => (
         <div key={i} className="vg-skel vg-skel-card" />
       ))}
+    </div>
+  );
+}
+
+/** Центрированный спиннер tgui — единый вид «идёт загрузка». */
+export function Loader() {
+  return (
+    <div className="vg-loader">
+      <Spinner size="l" />
+    </div>
+  );
+}
+
+/** Экран ошибки сети с кнопкой повтора — единый вид «нет связи». */
+export function ErrorState({
+  onRetry,
+  header = 'Нет связи',
+  description = 'Проверьте интернет и попробуйте ещё раз.',
+}: {
+  onRetry?: () => void;
+  header?: string;
+  description?: string;
+}) {
+  return (
+    <div className="vg-center">
+      <Placeholder
+        header={header}
+        description={description}
+        action={onRetry && <Button onClick={onRetry}>Повторить</Button>}
+      />
     </div>
   );
 }

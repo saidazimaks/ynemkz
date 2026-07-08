@@ -2,18 +2,19 @@ import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { HashRouter, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import { backButton, retrieveLaunchParams } from '@telegram-apps/sdk-react';
 import { Tabbar } from '@telegram-apps/telegram-ui';
-import { api, readCache, writeCache, type Me } from './api';
+import { apiGet, readCache, writeCache, type Me } from './api';
 import { PageSkeleton } from './hooks';
 import { ChartIcon, GearIcon, MapPinIcon, TagIcon, UserIcon } from './icons';
 import Home from './pages/Home';
 import Activate from './pages/Activate';
 import Profile from './pages/Profile';
-import PartnerCabinet from './pages/PartnerCabinet';
-import Admin from './pages/admin';
 
 // Leaflet (~40% бандла) нужен только этим страницам — грузим отдельным чанком
 const PartnerPage = lazy(() => import('./pages/Partner'));
 const MapPage = lazy(() => import('./pages/Map'));
+// Кабинеты партнёра и админа нужны единицам — покупатель этот код не качает
+const PartnerCabinet = lazy(() => import('./pages/PartnerCabinet'));
+const Admin = lazy(() => import('./pages/admin'));
 
 /** startapp=p_123 (наклейка на кассе) → сразу экран активации. */
 function StartParamRedirect() {
@@ -87,8 +88,9 @@ export default function App() {
   const [me, setMe] = useState<Me | null | undefined>(() => readCache<Me>('/me'));
 
   useEffect(() => {
-    api<Me>('/me')
-      .then((m) => { setMe(m); writeCache('/me', m); })
+    // apiGet сам пишет кэши; заодно склеивается с параллельным GET /me, если есть
+    apiGet<Me>('/me')
+      .then(setMe)
       .catch(() => setMe((cur) => (cur === undefined ? null : cur)));
   }, []);
 

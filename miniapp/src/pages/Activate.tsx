@@ -20,9 +20,11 @@ export default function Activate() {
   const navigate = useNavigate();
   const [state, setState] = useState<State>({ kind: 'loading' });
   const [clock, setClock] = useState('');
+  const [attempt, setAttempt] = useState(0); // повтор после сетевой ошибки
   const offsetRef = useRef(0);
 
   useEffect(() => {
+    setState({ kind: 'loading' });
     api<Activation>('/activate', {
       method: 'POST',
       body: JSON.stringify({ partner_id: Number(partnerId) }),
@@ -44,7 +46,7 @@ export default function Activate() {
           setState({ kind: 'error', message: 'Нет связи. Попробуйте ещё раз.' });
         }
       });
-  }, [partnerId]);
+  }, [partnerId, attempt]);
 
   // Пока экран живой — случайный свайп вниз не закроет приложение у кассы
   useEffect(() => {
@@ -76,13 +78,22 @@ export default function Activate() {
     return () => clearInterval(timer);
   }, [state]);
 
-  if (state.kind === 'loading') return <div className="vg-loader"><Spinner size="l" /></div>;
+  // Загрузка — сразу на фирменном тёмном фоне, без «вспышки» светлой темы
+  if (state.kind === 'loading')
+    return (
+      <div className="vg-act">
+        <Spinner size="l" />
+        <div className="vg-act-note">Активируем скидку…</div>
+      </div>
+    );
 
   if (state.kind === 'expired')
     return (
-      <Placeholder header="Экран истёк"
-                   description="Отсканируйте QR на кассе заново."
-                   action={<Button onClick={() => navigate('/')}>К скидкам</Button>} />
+      <div className="vg-center">
+        <Placeholder header="Экран истёк"
+                     description="Отсканируйте QR на кассе заново."
+                     action={<Button onClick={() => navigate('/')}>К скидкам</Button>} />
+      </div>
     );
 
   if (state.kind === 'need_bot') {
@@ -90,31 +101,45 @@ export default function Activate() {
     // deep link сохраняет partner_id: после регистрации бот сразу активирует скидку
     const link = `https://t.me/${botUsername}?start=p_${partnerId}`;
     return (
-      <Placeholder
-        header="Почти готово!"
-        description="Нажмите Start в боте — регистрация в один тап, скидка активируется сразу после."
-        action={botUsername && (
-          <Button onClick={() => { try { openTelegramLink(link); } catch { window.open(link); } }}>
-            Зарегистрироваться
-          </Button>
-        )}
-      />
+      <div className="vg-center">
+        <Placeholder
+          header="Почти готово!"
+          description="Нажмите Start в боте — регистрация в один тап, скидка активируется сразу после."
+          action={botUsername && (
+            <Button onClick={() => { try { openTelegramLink(link); } catch { window.open(link); } }}>
+              Зарегистрироваться
+            </Button>
+          )}
+        />
+      </div>
     );
   }
 
   if (state.kind === 'need_sub')
     return (
-      <Placeholder
-        header={`Скидка −${state.discount}% по подписке`}
-        description={`«${state.partner}» даёт скидку подписчикам клуба. Оформите подписку и возвращайтесь!`}
-        action={<Button onClick={() => navigate('/profile')}>Оформить подписку</Button>}
-      />
+      <div className="vg-center">
+        <Placeholder
+          header={`Скидка −${state.discount}% по подписке`}
+          description={`«${state.partner}» даёт скидку подписчикам клуба. Оформите подписку и возвращайтесь!`}
+          action={<Button onClick={() => navigate('/profile')}>Оформить подписку</Button>}
+        />
+      </div>
     );
 
   if (state.kind === 'error')
     return (
-      <Placeholder header="Не получилось" description={state.message}
-                   action={<Button onClick={() => navigate('/')}>К скидкам</Button>} />
+      <div className="vg-center">
+        <Placeholder
+          header="Не получилось"
+          description={state.message}
+          action={
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+              <Button onClick={() => setAttempt((n) => n + 1)}>Повторить</Button>
+              <Button mode="gray" onClick={() => navigate('/')}>К скидкам</Button>
+            </div>
+          }
+        />
+      </div>
     );
 
   const { data } = state;

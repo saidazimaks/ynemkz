@@ -16,12 +16,12 @@ export default function Broadcast() {
   const [segment, setSegment] = useState<Segment>('all');
   const [text, setText] = useState('');
   const [recipients, setRecipients] = useState<number | null>(null);
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
 
   const preview = async () => {
     setBusy(true);
-    setStatus('');
+    setStatus(null);
     try {
       const r = await api<{ recipients: number }>('/admin/broadcast', {
         method: 'POST',
@@ -29,7 +29,7 @@ export default function Broadcast() {
       });
       setRecipients(r.recipients);
     } catch {
-      setStatus('Ошибка предпросмотра');
+      setStatus({ ok: false, text: 'Ошибка предпросмотра — проверьте связь' });
     }
     setBusy(false);
   };
@@ -41,11 +41,11 @@ export default function Broadcast() {
         method: 'POST',
         body: JSON.stringify({ segment, text, dry_run: false }),
       });
-      setStatus(`Отправляется ${r.recipients} получателям (батчами, займёт время).`);
+      setStatus({ ok: true, text: `Отправляется ${r.recipients} получателям (батчами, займёт время).` });
       setText('');
       setRecipients(null);
     } catch {
-      setStatus('Ошибка отправки');
+      setStatus({ ok: false, text: 'Ошибка отправки — попробуйте ещё раз' });
     }
     setBusy(false);
   };
@@ -75,7 +75,9 @@ export default function Broadcast() {
               </div>
             </>
           )}
-          {status && <div style={{ textAlign: 'center' }}>{status}</div>}
+          {status && (
+            <div className={`vg-note ${status.ok ? 'is-ok' : 'is-err'}`}>{status.text}</div>
+          )}
         </div>
       </Section>
     </List>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Button, Cell, Image, List, Placeholder, Section, Spinner } from '@telegram-apps/telegram-ui';
-import { api } from '../../api';
+import { Button, Cell, Image, List, Placeholder, Section } from '@telegram-apps/telegram-ui';
+import { api, ApiError } from '../../api';
+import { ErrorState, Loader } from '../../hooks';
 
 interface Receipt {
   id: number;
@@ -18,27 +19,43 @@ interface AdminStats {
   visits_today: number; visits_month: number;
 }
 
+type ReceiptsState = Receipt[] | 'loading' | 'forbidden' | 'error';
+
 export default function Overview() {
-  const [receipts, setReceipts] = useState<Receipt[] | null | undefined>(undefined);
+  const [receipts, setReceipts] = useState<ReceiptsState>('loading');
   const [stats, setStats] = useState<AdminStats | null>(null);
+  const [decidingId, setDecidingId] = useState<number | null>(null);
 
   const load = () => {
-    api<Receipt[]>('/admin/receipts').then(setReceipts).catch(() => setReceipts(null));
+    api<Receipt[]>('/admin/receipts')
+      .then(setReceipts)
+      .catch((e: unknown) => {
+        const forbidden = e instanceof ApiError && (e.status === 401 || e.status === 403);
+        setReceipts(forbidden ? 'forbidden' : 'error');
+      });
     api<AdminStats>('/admin/stats').then(setStats).catch(() => {});
   };
   useEffect(load, []);
 
   const decide = async (id: number, approve: boolean) => {
+    setDecidingId(id); // защита от двойного тапа
     await api(`/admin/receipts/${id}/decide`, {
       method: 'POST',
       body: JSON.stringify({ approve }),
     }).catch(() => {});
+    setDecidingId(null);
     load();
   };
 
-  if (receipts === undefined) return <Spinner size="l" />;
-  if (receipts === null)
-    return <Placeholder header="Нет доступа" description="Раздел только для админов." />;
+  if (receipts === 'loading') return <Loader />;
+  if (receipts === 'error')
+    return <ErrorState onRetry={() => { setReceipts('loading'); load(); }} />;
+  if (receipts === 'forbidden')
+    return (
+      <div className="vg-center">
+        <Placeholder header="Нет доступа" description="Раздел только для админов." />
+      </div>
+    );
 
   const conversion = stats && stats.users_total
     ? Math.round((stats.subs_active / stats.users_total) * 1000) / 10 : 0;
@@ -67,7 +84,9 @@ export default function Overview() {
       )}
 
       <Section header={`Очередь чеков (${receipts.length})`}>
-        {receipts.length === 0 && <Cell subtitle="Все заявки обработаны">Пусто</Cell>}
+        {receipts.length === 0 && (
+          <div className="vg-empty">Очередь пуста — все заявки обработаны</div>
+        )}
         {receipts.map((r) => (
           <div key={r.id} style={{ padding: '8px 16px' }}>
             <Cell subtitle={`${r.amount} ₸ · ${new Date(r.created_at).toLocaleString('ru-RU')}`}>
@@ -79,8 +98,14 @@ export default function Overview() {
               </a>
             )}
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <Button size="s" onClick={() => decide(r.id, true)}>Подтвердить</Button>
-              <Button size="s" mode="gray" onClick={() => decide(r.id, false)}>Отклонить</Button>
+              <Button size="s" loading={decidingId === r.id} disabled={decidingId !== null}
+                      onClick={() => decide(r.id, true)}>
+                Подтвердить
+              </Button>
+              <Button size="s" mode="gray" disabled={decidingId !== null}
+                      onClick={() => decide(r.id, false)}>
+                Отклонить
+              </Button>
             </div>
           </div>
         ))}

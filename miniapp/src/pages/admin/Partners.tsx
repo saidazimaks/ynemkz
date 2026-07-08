@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Badge, Button, Cell, Input, List, Section, Spinner, Switch } from '@telegram-apps/telegram-ui';
+import { Badge, Button, Cell, Input, List, Section, Switch } from '@telegram-apps/telegram-ui';
 import { retrieveRawInitData } from '@telegram-apps/sdk-react';
 import { api, type Partner } from '../../api';
+import { ErrorState, Loader } from '../../hooks';
 
 interface AdminPartner extends Partner {
   user_id: number | null;
@@ -21,6 +22,7 @@ function Editor({ p, onSaved }: { p: AdminPartner; onSaved: () => void }) {
     user_tg_id: p.user_id ?? '',
   });
   const [qrUrl, setQrUrl] = useState('');
+  const [qrError, setQrError] = useState('');
   const [busy, setBusy] = useState(false);
 
   const save = async () => {
@@ -48,12 +50,18 @@ function Editor({ p, onSaved }: { p: AdminPartner; onSaved: () => void }) {
 
   const showQr = async () => {
     // <img> не умеет слать заголовок авторизации — качаем blob сами
-    let initData = '';
-    try { initData = retrieveRawInitData() ?? ''; } catch { /* dev в браузере */ }
-    const res = await fetch(`${import.meta.env.VITE_API_URL ?? ''}/api/admin/partners/${p.id}/qr`, {
-      headers: { Authorization: `tma ${initData}` },
-    });
-    if (res.ok) setQrUrl(URL.createObjectURL(await res.blob()));
+    setQrError('');
+    try {
+      let initData = '';
+      try { initData = retrieveRawInitData() ?? ''; } catch { /* dev в браузере */ }
+      const res = await fetch(`${import.meta.env.VITE_API_URL ?? ''}/api/admin/partners/${p.id}/qr`, {
+        headers: { Authorization: `tma ${initData}` },
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      setQrUrl(URL.createObjectURL(await res.blob()));
+    } catch {
+      setQrError('QR не загрузился — попробуйте ещё раз');
+    }
   };
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
@@ -86,10 +94,13 @@ function Editor({ p, onSaved }: { p: AdminPartner; onSaved: () => void }) {
         <Button size="s" loading={busy} onClick={save}>Сохранить</Button>
         <Button size="s" mode="gray" onClick={showQr}>QR-наклейка</Button>
       </div>
+      {qrError && <div className="vg-note is-err">{qrError}</div>}
       {qrUrl && (
         <div style={{ textAlign: 'center' }}>
           <img src={qrUrl} width={220} alt="QR" />
-          <div style={{ fontSize: 13, opacity: 0.6 }}>Долгий тап → сохранить изображение</div>
+          <div style={{ fontSize: 13, color: 'var(--tgui--hint_color, #8a8a8e)' }}>
+            Долгий тап → сохранить изображение
+          </div>
         </div>
       )}
     </div>
@@ -97,23 +108,29 @@ function Editor({ p, onSaved }: { p: AdminPartner; onSaved: () => void }) {
 }
 
 export default function Partners() {
-  const [partners, setPartners] = useState<AdminPartner[] | undefined>(undefined);
+  // undefined — грузим, null — ошибка сети
+  const [partners, setPartners] = useState<AdminPartner[] | null | undefined>(undefined);
   const [open, setOpen] = useState<number | null>(null);
   const [newName, setNewName] = useState('');
+  const [creating, setCreating] = useState(false);
 
   const load = () => {
-    api<AdminPartner[]>('/admin/partners').then(setPartners).catch(() => setPartners([]));
+    api<AdminPartner[]>('/admin/partners').then(setPartners).catch(() => setPartners(null));
   };
   useEffect(load, []);
 
   const create = async () => {
+    setCreating(true);
     await api('/admin/partners', { method: 'POST', body: JSON.stringify({ name: newName.trim() }) })
+      .then(() => setNewName(''))
       .catch(() => {});
-    setNewName('');
+    setCreating(false);
     load();
   };
 
-  if (!partners) return <Spinner size="l" />;
+  if (partners === undefined) return <Loader />;
+  if (partners === null)
+    return <ErrorState onRetry={() => { setPartners(undefined); load(); }} />;
 
   return (
     <List>
@@ -121,11 +138,16 @@ export default function Partners() {
         <div style={{ padding: '4px 16px 12px', display: 'flex', gap: 8 }}>
           <Input placeholder="Название заведения" value={newName}
                  onChange={(e) => setNewName(e.target.value)} />
-          <Button disabled={newName.trim().length < 2} onClick={create}>Добавить</Button>
+          <Button loading={creating} disabled={newName.trim().length < 2} onClick={create}>
+            Добавить
+          </Button>
         </div>
       </Section>
 
       <Section header={`Партнёры (${partners.length})`}>
+        {partners.length === 0 && (
+          <div className="vg-empty">Пока нет партнёров — добавьте первого выше</div>
+        )}
         {partners.map((p) => (
           <div key={p.id}>
             <Cell

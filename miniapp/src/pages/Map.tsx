@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Spinner } from '@telegram-apps/telegram-ui';
 import { MapContainer, Marker, Popup, TileLayer, useMap } from 'react-leaflet';
-import { api, type Partner } from './../api';
+import { type Partner } from './../api';
+import { useCachedApi } from './../hooks';
 import { markerIcon } from './leafletIcon';
 
 const EKIBASTUZ: [number, number] = [51.7298, 75.3266];
@@ -20,18 +21,20 @@ function LocateButton() {
 
 export default function MapPage() {
   const navigate = useNavigate();
-  const [pins, setPins] = useState<Partner[]>([]);
+  // undefined — грузим точки, null — ошибка сети (карта при этом работает).
+  // useCachedApi: точки из кэша рисуются мгновенно, свежий запрос — только
+  // если прошлый ответ старше TTL (переключение вкладок не дёргает сеть).
+  const [pins, retryPins] = useCachedApi<Partner[]>('/map');
 
-  useEffect(() => {
-    api<Partner[]>('/map').then(setPins).catch(() => {});
-  }, []);
+  // Партнёры без координат на карту не попадают
+  const shown = (pins ?? []).filter((p) => p.lat != null && p.lng != null);
 
   return (
     <div className="map-full">
       <MapContainer center={EKIBASTUZ} zoom={13} style={{ height: '100%' }}>
         <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
                    attribution="© OpenStreetMap" />
-        {pins.map((p) => (
+        {shown.map((p) => (
           <Marker key={p.id} position={[p.lat!, p.lng!]} icon={markerIcon}>
             <Popup>
               <b>{p.name}</b> — −{p.discount_premium}%
@@ -42,6 +45,23 @@ export default function MapPage() {
         ))}
         <LocateButton />
       </MapContainer>
+
+      {/* Статус загрузки точек — плашкой поверх карты, сама карта живая */}
+      {pins === undefined && (
+        <div className="vg-map-note">
+          <Spinner size="s" />
+          Загружаем заведения…
+        </div>
+      )}
+      {pins === null && (
+        <div className="vg-map-note">
+          Точки не загрузились.
+          <button onClick={retryPins}>Повторить</button>
+        </div>
+      )}
+      {pins !== undefined && pins !== null && shown.length === 0 && (
+        <div className="vg-map-note">На карте пока нет заведений</div>
+      )}
     </div>
   );
 }

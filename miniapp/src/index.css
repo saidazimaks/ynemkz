@@ -284,6 +284,23 @@ button, input, textarea, select {
   padding: 48px 0;
 }
 
+/* Вертикальное центрирование Placeholder-экранов (ошибка/нет доступа) */
+.vg-center {
+  min-height: calc(100dvh - 160px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Результат действия под формой: успех / ошибка */
+.vg-note {
+  text-align: center;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.vg-note.is-ok { color: var(--vg-accent); font-weight: 600; }
+.vg-note.is-err { color: var(--tgui--destructive_text_color, #df3f40); }
+
 /* --- Skeleton-заглушки (shimmer) ------------------------------- */
 
 @keyframes vg-shimmer {
@@ -490,8 +507,51 @@ button, input, textarea, select {
 /* --- Карта ------------------------------------------------------ */
 
 .map-full {
-  height: calc(100dvh - 96px);
+  position: relative;
+  /* высота за вычетом таббара и его safe-area паддинга */
+  height: calc(
+    100dvh - 96px -
+      var(--tg-viewport-content-safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))
+  );
   width: 100%;
+}
+
+/* Плашка статуса поверх карты: «загружаем точки» / «нет связи» */
+.vg-map-note {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: calc(100% - 32px);
+  padding: 9px 16px;
+  border-radius: 99px;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  background: var(--tgui--bg_color, #fff);
+  color: var(--tgui--text_color, #000);
+  border: 1px solid var(--tgui--outline, rgba(0, 0, 0, 0.08));
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
+}
+.vg-map-note button {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--vg-accent);
+  cursor: pointer;
+}
+
+/* Ссылка «Подробнее» в попапе Leaflet — акцент вместо дефолтного синего */
+.leaflet-popup-content a {
+  color: var(--vg-accent);
+  font-weight: 600;
+  cursor: pointer;
 }
 
 .vg-locate {
@@ -511,6 +571,13 @@ button, input, textarea, select {
   transition: transform 0.12s ease;
 }
 .vg-locate:active { transform: scale(0.95); }
+
+/* --- Админка: отступ под таббар с учётом safe-area --------------- */
+
+.vg-admin {
+  padding-bottom:
+    calc(108px + var(--tg-viewport-content-safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)));
+}
 
 /* --- Статистика (кабинеты) -------------------------------------- */
 

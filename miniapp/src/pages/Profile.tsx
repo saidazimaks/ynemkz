@@ -10,11 +10,13 @@ export default function Profile({ me, onChange }: {
   me: Me | null | undefined;
   onChange: (m: Me) => void;
 }) {
-  const [visits, setVisits] = useState<Visit[]>([]);
+  // undefined — история грузится, null — не загрузилась (секцию скрываем без шума)
+  const [visits, setVisits] = useState<Visit[] | null | undefined>(undefined);
   const [paying, setPaying] = useState(false);
+  const [notifyBusy, setNotifyBusy] = useState(false);
 
   useEffect(() => {
-    api<Visit[]>('/me/visits').then(setVisits).catch(() => {});
+    api<Visit[]>('/me/visits').then(setVisits).catch(() => setVisits(null));
   }, []);
 
   // Набегающая сумма — эмоциональный центр экрана
@@ -37,13 +39,15 @@ export default function Profile({ me, onChange }: {
 
   if (me === null)
     return (
-      <Placeholder header="Нужна регистрация"
-                   description="Нажмите Start в боте — регистрация в один тап, затем возвращайтесь."
-                   action={BOT && (
-                     <Button onClick={() => { try { openTelegramLink(`https://t.me/${BOT}`); } catch { /* dev */ } }}>
-                       Открыть бота
-                     </Button>
-                   )} />
+      <div className="vg-center">
+        <Placeholder header="Нужна регистрация"
+                     description="Нажмите Start в боте — регистрация в один тап, затем возвращайтесь."
+                     action={BOT && (
+                       <Button onClick={() => { try { openTelegramLink(`https://t.me/${BOT}`); } catch { /* dev */ } }}>
+                         Открыть бота
+                       </Button>
+                     )} />
+      </div>
     );
 
   const payStars = async () => {
@@ -62,8 +66,15 @@ export default function Profile({ me, onChange }: {
   };
 
   const toggleNotify = async (enabled: boolean) => {
-    await api('/me/notify', { method: 'POST', body: JSON.stringify({ enabled }) });
+    // Оптимистично переключаем; при ошибке сети откатываем обратно
+    setNotifyBusy(true);
     onChange({ ...me, notify_daily: enabled });
+    try {
+      await api('/me/notify', { method: 'POST', body: JSON.stringify({ enabled }) });
+    } catch {
+      onChange({ ...me, notify_daily: !enabled });
+    }
+    setNotifyBusy(false);
   };
 
   const sub = me.subscription;
@@ -113,31 +124,44 @@ export default function Profile({ me, onChange }: {
             </div>
           </div>
           {/* Stars — системной MainButton внизу; Kaspi — запасной путь */}
-          <Button stretched mode="gray" onClick={payKaspi}>Оплатить Kaspi (чек в боте)</Button>
+          {BOT && (
+            <Button stretched mode="gray" onClick={payKaspi}>Оплатить Kaspi (чек в боте)</Button>
+          )}
         </div>
       )}
 
-      {visits.length > 0 && (
+      <div className="vg-h">История визитов</div>
+      {visits === undefined ? (
+        // История ещё грузится — пара строк-скелетонов вместо прыжка вёрстки
         <>
-          <div className="vg-h">История визитов</div>
-          <List>
-            <Section>
-              {visits.slice(0, 10).map((v, i) => (
-                <Cell key={i}
-                      subtitle={new Date(v.used_at).toLocaleDateString('ru-RU')}
-                      after={<span className="vg-pct">−{v.discount}%</span>}>
-                  {v.name}
-                </Cell>
-              ))}
-            </Section>
-          </List>
+          <div className="vg-skel vg-skel-card" />
+          <div className="vg-skel vg-skel-card" />
         </>
+      ) : visits === null ? (
+        <div className="vg-empty">Не удалось загрузить историю визитов</div>
+      ) : visits.length === 0 ? (
+        <div className="vg-empty">
+          Пока нет визитов. Сканируйте QR на кассе партнёра — скидка запишется сюда.
+        </div>
+      ) : (
+        <List>
+          <Section>
+            {visits.slice(0, 10).map((v, i) => (
+              <Cell key={i}
+                    subtitle={new Date(v.used_at).toLocaleDateString('ru-RU')}
+                    after={<span className="vg-pct">−{v.discount}%</span>}>
+                {v.name}
+              </Cell>
+            ))}
+          </Section>
+        </List>
       )}
 
       <div className="vg-h">Настройки</div>
       <List>
         <Section>
           <Cell after={<Switch checked={me.notify_daily}
+                               disabled={notifyBusy}
                                onChange={(e) => toggleNotify(e.target.checked)} />}>
             Утренняя скидка дня
           </Cell>

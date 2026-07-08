@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Button, Cell, Input, List, Section, Spinner } from '@telegram-apps/telegram-ui';
+import { Button, Cell, Input, List, Section } from '@telegram-apps/telegram-ui';
 import { api, type Partner } from '../../api';
+import { ErrorState, Loader } from '../../hooks';
 
 interface Deal {
   deal_date: string;
@@ -11,14 +12,16 @@ interface Deal {
 
 /** Календарь скидки дня: назначение партнёров на даты наперёд (раздел 3.5). */
 export default function Deals() {
-  const [deals, setDeals] = useState<Deal[] | undefined>(undefined);
+  // undefined — грузим, null — ошибка сети
+  const [deals, setDeals] = useState<Deal[] | null | undefined>(undefined);
   const [partners, setPartners] = useState<Partner[]>([]);
   const [partnerId, setPartnerId] = useState('');
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [description, setDescription] = useState('');
   const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const load = () => api<Deal[]>('/admin/daily-deals').then(setDeals).catch(() => setDeals([]));
+  const load = () => api<Deal[]>('/admin/daily-deals').then(setDeals).catch(() => setDeals(null));
   useEffect(() => {
     load();
     api<Partner[]>('/catalog').then(setPartners).catch(() => {});
@@ -26,20 +29,28 @@ export default function Deals() {
 
   const save = async () => {
     setBusy(true);
-    await api('/admin/daily-deals', {
-      method: 'POST',
-      body: JSON.stringify({
-        partner_id: Number(partnerId),
-        deal_date: date,
-        description: description || null,
-      }),
-    }).catch(() => {});
+    setNote(null);
+    try {
+      await api('/admin/daily-deals', {
+        method: 'POST',
+        body: JSON.stringify({
+          partner_id: Number(partnerId),
+          deal_date: date,
+          description: description || null,
+        }),
+      });
+      setNote({ ok: true, text: 'Скидка дня назначена' });
+      setDescription('');
+      load();
+    } catch {
+      setNote({ ok: false, text: 'Не удалось сохранить — проверьте связь' });
+    }
     setBusy(false);
-    setDescription('');
-    load();
   };
 
-  if (!deals) return <Spinner size="l" />;
+  if (deals === undefined) return <Loader />;
+  if (deals === null)
+    return <ErrorState onRetry={() => { setDeals(undefined); load(); }} />;
 
   return (
     <List>
@@ -64,11 +75,14 @@ export default function Deals() {
           <Button stretched loading={busy} disabled={!partnerId || !date} onClick={save}>
             Назначить
           </Button>
+          {note && <div className={`vg-note ${note.ok ? 'is-ok' : 'is-err'}`}>{note.text}</div>}
         </div>
       </Section>
 
       <Section header="Календарь (ближайшие)">
-        {deals.length === 0 && <Cell subtitle="Назначьте партнёра на сегодня">Пусто</Cell>}
+        {deals.length === 0 && (
+          <div className="vg-empty">Календарь пуст — назначьте партнёра на сегодня</div>
+        )}
         {deals.map((d) => (
           <Cell key={d.deal_date}
                 subtitle={d.description ?? ''}

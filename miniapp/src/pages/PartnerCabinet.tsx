@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Button, Cell, Input, List, Placeholder, Section, Spinner, Switch } from '@telegram-apps/telegram-ui';
+import { Button, Cell, Input, List, Placeholder, Section, Switch } from '@telegram-apps/telegram-ui';
 import { api, ApiError } from './../api';
+import { ErrorState, Loader } from './../hooks';
 
 interface Stats {
   today: number;
@@ -29,43 +30,66 @@ interface Activation {
   discount: number;
 }
 
+type StatsState = Stats | 'loading' | 'forbidden' | 'error';
+
 export default function PartnerCabinet() {
-  const [stats, setStats] = useState<Stats | null | undefined>(undefined);
+  const [stats, setStats] = useState<StatsState>('loading');
   const [card, setCard] = useState<Card | null>(null);
-  const [feed, setFeed] = useState<Activation[]>([]);
+  // undefined — лента грузится, null — не загрузилась
+  const [feed, setFeed] = useState<Activation[] | null | undefined>(undefined);
   const [code, setCode] = useState('');
-  const [result, setResult] = useState('');
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [redeeming, setRedeeming] = useState(false);
 
   const load = () => {
-    api<Stats>('/partner/stats').then(setStats).catch(() => setStats(null));
+    api<Stats>('/partner/stats')
+      .then(setStats)
+      .catch((e: unknown) => {
+        // 401/403 — не партнёр; остальное — сеть
+        const forbidden = e instanceof ApiError && (e.status === 401 || e.status === 403);
+        setStats(forbidden ? 'forbidden' : 'error');
+      });
     api<Card>('/partner/me').then(setCard).catch(() => {});
-    api<Activation[]>('/partner/activations').then(setFeed).catch(() => {});
+    api<Activation[]>('/partner/activations').then(setFeed).catch(() => setFeed(null));
   };
   useEffect(load, []);
 
   const redeem = async () => {
-    setResult('');
+    setResult(null);
+    setRedeeming(true);
     try {
       const r = await api<{ client_name: string | null }>('/partner/redeem', {
         method: 'POST',
         body: JSON.stringify({ code: code.trim().toUpperCase() }),
       });
-      setResult(`Визит записан: ${r.client_name ?? 'клиент'}`);
+      setResult({ ok: true, text: `Визит записан: ${r.client_name ?? 'клиент'}` });
       setCode('');
       load();
     } catch (e) {
-      setResult(e instanceof ApiError ? String(e.detail) : 'Ошибка сети');
+      setResult({ ok: false, text: e instanceof ApiError ? String(e.detail) : 'Ошибка сети' });
     }
+    setRedeeming(false);
   };
 
   const togglePause = async (paused: boolean) => {
-    await api('/partner/pause', { method: 'POST', body: JSON.stringify({ paused }) }).catch(() => {});
-    setCard(card ? { ...card, is_paused: paused } : card);
+    // Оптимистично; при ошибке сети возвращаем как было
+    setCard((c) => (c ? { ...c, is_paused: paused } : c));
+    try {
+      await api('/partner/pause', { method: 'POST', body: JSON.stringify({ paused }) });
+    } catch {
+      setCard((c) => (c ? { ...c, is_paused: !paused } : c));
+    }
   };
 
-  if (stats === undefined) return <div className="vg-loader"><Spinner size="l" /></div>;
-  if (stats === null)
-    return <Placeholder header="Нет доступа" description="Кабинет доступен партнёрам клуба." />;
+  if (stats === 'loading') return <Loader />;
+  if (stats === 'error')
+    return <ErrorState onRetry={() => { setStats('loading'); load(); }} />;
+  if (stats === 'forbidden')
+    return (
+      <div className="vg-center">
+        <Placeholder header="Нет доступа" description="Кабинет доступен партнёрам клуба." />
+      </div>
+    );
 
   const max = Math.max(...stats.by_day.map((d) => d.visits), 1);
 
@@ -121,27 +145,36 @@ export default function PartnerCabinet() {
 
       <div className="vg-h">Код клиента (фолбэк)</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <Input placeholder="A7K2M9" value={code}
-               onChange={(e) => setCode(e.target.value)} />
-        <Button stretched disabled={code.trim().length < 6} onClick={redeem}>Записать визит</Button>
-        {result && <div style={{ textAlign: 'center', fontSize: 14 }}>{result}</div>}
+        <Input placeholder="A7K2M9" value={code} maxLength={6}
+               autoCapitalize="characters" autoCorrect="off"
+               onChange={(e) => setCode(e.target.value.toUpperCase())} />
+        <Button stretched loading={redeeming} disabled={code.trim().length < 6} onClick={redeem}>
+          Записать визит
+        </Button>
+        {result && (
+          <div className={`vg-note ${result.ok ? 'is-ok' : 'is-err'}`}>{result.text}</div>
+        )}
       </div>
 
-      {feed.length > 0 && (
-        <>
-          <div className="vg-h">Последние активации</div>
-          <List>
-            <Section>
-              {feed.map((a, i) => (
-                <Cell key={i}
-                      subtitle={new Date(a.used_at).toLocaleString('ru-RU')}
-                      after={<span className="vg-pct">−{a.discount}%</span>}>
-                  {a.full_name ?? 'Клиент'}
-                </Cell>
-              ))}
-            </Section>
-          </List>
-        </>
+      <div className="vg-h">Последние активации</div>
+      {feed === undefined ? (
+        <div className="vg-skel vg-skel-card" />
+      ) : feed === null ? (
+        <div className="vg-empty">Не удалось загрузить активации</div>
+      ) : feed.length === 0 ? (
+        <div className="vg-empty">Пока нет активаций — они появятся здесь сразу после QR</div>
+      ) : (
+        <List>
+          <Section>
+            {feed.map((a, i) => (
+              <Cell key={i}
+                    subtitle={new Date(a.used_at).toLocaleString('ru-RU')}
+                    after={<span className="vg-pct">−{a.discount}%</span>}>
+                {a.full_name ?? 'Клиент'}
+              </Cell>
+            ))}
+          </Section>
+        </List>
       )}
     </div>
   );

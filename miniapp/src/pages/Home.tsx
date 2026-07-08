@@ -2,18 +2,21 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Input } from '@telegram-apps/telegram-ui';
 import { type DailyDeal, type Partner } from './../api';
-import { useCachedApi } from './../hooks';
+import { ErrorState, useCachedApi } from './../hooks';
 
 function Logo({ src, name }: { src: string | null; name: string }) {
+  // lazy — логотипы ниже экрана не качаются, пока не доскроллили;
+  // width/height — браузер резервирует место до загрузки CSS/картинки
   return src
-    ? <img className="vg-logo" src={src} alt="" />
+    ? <img className="vg-logo" src={src} alt="" width={46} height={46}
+           loading="lazy" decoding="async" />
     : <div className="vg-logo">{name[0]}</div>;
 }
 
 export default function Home() {
   const navigate = useNavigate();
-  const deal = useCachedApi<DailyDeal | null>('/daily-deal');
-  const partners = useCachedApi<Partner[]>('/catalog');
+  const [deal] = useCachedApi<DailyDeal | null>('/daily-deal');
+  const [partners, retryPartners] = useCachedApi<Partner[]>('/catalog');
   const [category, setCategory] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
@@ -27,24 +30,34 @@ export default function Home() {
       (!search || p.name.toLowerCase().includes(search.toLowerCase())),
   );
 
+  const brand = (
+    <div className="vg-brand">
+      <span className="vg-brand-name">Ynem</span>
+      <span className="vg-brand-city">Экибастуз</span>
+    </div>
+  );
+
   if (partners === undefined)
     return (
       <div className="vg-page">
-        <div className="vg-brand">
-          <span className="vg-brand-name">Ynem</span>
-          <span className="vg-brand-city">Экибастуз</span>
-        </div>
+        {brand}
         <div className="vg-skel vg-skel-hero" />
         {Array.from({ length: 4 }, (_, i) => <div key={i} className="vg-skel vg-skel-card" />)}
       </div>
     );
 
+  // Каталог не загрузился и кэша нет — честная ошибка с повтором
+  if (partners === null)
+    return (
+      <div className="vg-page">
+        {brand}
+        <ErrorState onRetry={retryPartners} />
+      </div>
+    );
+
   return (
     <div className="vg-page vg-stagger">
-      <div className="vg-brand">
-        <span className="vg-brand-name">Ynem</span>
-        <span className="vg-brand-city">Экибастуз</span>
-      </div>
+      {brand}
 
       {deal && (
         <div className="vg-hero" onClick={() => navigate(`/partners/${deal.id}`)}>
@@ -87,7 +100,13 @@ export default function Home() {
             <div className="vg-pct">−{p.discount_premium}%</div>
           </div>
         ))}
-        {shown.length === 0 && <div className="vg-empty">Ничего не нашлось</div>}
+        {shown.length === 0 && (
+          <div className="vg-empty">
+            {partners.length === 0
+              ? 'Каталог пока пуст — партнёры скоро появятся'
+              : 'Ничего не нашлось. Попробуйте другой запрос или категорию.'}
+          </div>
+        )}
       </div>
     </div>
   );

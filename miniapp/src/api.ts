@@ -54,7 +54,38 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     } catch { /* не JSON */ }
     throw new ApiError(res.status, detail);
   }
+  // Любая мутация (активация, оплата, настройки) может изменить каталог,
+  // профиль или визиты — сбрасываем свежесть, следующий GET пойдёт в сеть
+  if (options.method && options.method !== 'GET') memCache.clear();
   return res.json();
+}
+
+// --- Кэш GET в памяти (TTL): между вкладками не гоняем одни и те же запросы --
+// sessionStorage выше даёт мгновенный рендер из прошлого ответа, но фоновый
+// refetch раньше уходил при каждом монтировании экрана. Здесь: ответ моложе
+// TTL отдаём из памяти без сети, а параллельные GET одного пути склеиваем
+// в один fetch. Мутации чистят кэш (см. api выше).
+const FRESH_TTL_MS = 60_000;
+const memCache = new Map<string, { at: number; data: unknown }>();
+const inflight = new Map<string, Promise<unknown>>();
+
+/** GET с памятью: `force` — мимо кэша (кнопка «Повторить»). */
+export function apiGet<T>(path: string, { force = false } = {}): Promise<T> {
+  if (!force) {
+    const hit = memCache.get(path);
+    if (hit && Date.now() - hit.at < FRESH_TTL_MS) return Promise.resolve(hit.data as T);
+    const running = inflight.get(path);
+    if (running) return running as Promise<T>;
+  }
+  const p = api<T>(path)
+    .then((data) => {
+      memCache.set(path, { at: Date.now(), data });
+      writeCache(path, data); // и в sessionStorage — для мгновенного рендера потом
+      return data;
+    })
+    .finally(() => { inflight.delete(path); });
+  inflight.set(path, p);
+  return p;
 }
 
 // --- Типы ответов ---------------------------------------------------------

@@ -19,7 +19,7 @@ const SECTIONS: { id: SectionId; label: string }[] = [
 export default function Admin() {
   const [section, setSection] = useState<SectionId>('overview');
   return (
-    <div style={{ paddingBottom: 96 }}>
+    <div className="vg-admin">
       <Chips items={SECTIONS} value={section} onChange={setSection} />
       {section === 'overview' && <Overview />}
       {section === 'partners' && <Partners />}
