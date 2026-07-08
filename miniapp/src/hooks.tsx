@@ -141,21 +141,24 @@ export function Loader() {
   );
 }
 
-/** Экран ошибки сети с кнопкой повтора — единый вид «нет связи». */
+/** Экран ошибки сети с кнопкой повтора — единый вид «нет связи».
+ *  status — HTTP-код из useCachedApi: мелкой строкой, ускоряет диагностику по скриншоту. */
 export function ErrorState({
   onRetry,
   header = 'Нет связи',
   description = 'Проверьте интернет и попробуйте ещё раз.',
+  status,
 }: {
   onRetry?: () => void;
   header?: string;
   description?: string;
+  status?: number | null;
 }) {
   return (
     <div className="vg-center">
       <Placeholder
         header={header}
-        description={description}
+        description={status ? `${description} Код: ${status}.` : description}
         action={onRetry && <Button onClick={onRetry}>Повторить</Button>}
       />
     </div>

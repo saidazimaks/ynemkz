@@ -108,7 +108,7 @@ export default function Home() {
     return (
       <div className="vg-page">
         {brand}
-        <ErrorState onRetry={retryPartners} />
+        <ErrorState onRetry={retryPartners} status={catalogErr} />
       </div>
     );
 
