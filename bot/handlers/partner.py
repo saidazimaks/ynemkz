@@ -8,7 +8,8 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
 
 from bot import db
-from bot.services import redemption
+from bot.services import partners, redemption
+from bot.texts import t
 
 router = Router(name="partner")
 
@@ -17,21 +18,16 @@ class EnterCode(StatesGroup):
     code = State()
 
 
-async def _partner_of(user_id: int) -> dict | None:
-    row = await db.fetchrow("SELECT * FROM partners WHERE user_id = $1 AND is_active", user_id)
-    return dict(row) if row else None
+async def _partner_of(user_id: int) -> tuple[dict, bool] | None:
+    """Заведение пользователя (владелец или кассир из partner_staff) + флаг владения."""
+    return await partners.partner_for_user(user_id)
 
 
 @router.message(Command("partner"))
-async def partner_menu(message: Message, role: str) -> None:
+async def partner_menu(message: Message, role: str, lang: str) -> None:
     if role != "partner":
         return
-    await message.answer(
-        "Кабинет партнёра:\n"
-        "/code — ввести код клиента\n"
-        "/stats — статистика визитов\n"
-        "/pause — поставить скидку на паузу / снять"
-    )
+    await message.answer(t("partner_menu", lang))
 
 
 @router.message(Command("code"))
@@ -45,10 +41,11 @@ async def ask_code(message: Message, role: str, state: FSMContext) -> None:
 @router.message(EnterCode.code, F.text)
 async def apply_code(message: Message, state: FSMContext) -> None:
     await state.clear()
-    partner = await _partner_of(message.from_user.id)
-    if partner is None:
+    res = await _partner_of(message.from_user.id)
+    if res is None:
         await message.answer("Вы не привязаны к партнёру.")
         return
+    partner, _ = res
 
     row = await redemption.redeem_by_code(message.text.strip(), partner["id"])
     if row is None:
@@ -63,9 +60,10 @@ async def apply_code(message: Message, state: FSMContext) -> None:
 async def partner_stats(message: Message, role: str) -> None:
     if role != "partner":
         return
-    partner = await _partner_of(message.from_user.id)
-    if partner is None:
+    res = await _partner_of(message.from_user.id)
+    if res is None:
         return
+    partner, _ = res
     row = await db.fetchrow(
         """
         SELECT
@@ -83,11 +81,15 @@ async def partner_stats(message: Message, role: str) -> None:
 
 
 @router.message(Command("pause"))
-async def toggle_pause(message: Message, role: str) -> None:
+async def toggle_pause(message: Message, role: str, lang: str) -> None:
     if role != "partner":
         return
-    partner = await _partner_of(message.from_user.id)
-    if partner is None:
+    res = await _partner_of(message.from_user.id)
+    if res is None:
+        return
+    partner, is_owner = res
+    if not is_owner:
+        await message.answer(t("pause_owner_only", lang))
         return
     new = not partner["is_paused"]
     await db.execute("UPDATE partners SET is_paused = $2 WHERE id = $1", partner["id"], new)

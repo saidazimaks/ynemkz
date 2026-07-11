@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from api.auth import get_user
 from bot import db
 from bot.config import settings
-from bot.services import payments, qr, redemption
+from bot.services import partners, payments, qr, redemption
 from bot.texts import t
 
 router = APIRouter()
@@ -33,11 +33,15 @@ def _bot() -> Bot:
     return Bot(token=settings.bot_token)
 
 
-async def _ping_partner(chat_id: int, text: str) -> None:
+async def _ping_partners(chat_ids: list[int], text: str) -> None:
+    """Пинг владельцу и кассирам заведения одним ботом без polling."""
     bot = _bot()
-    with contextlib.suppress(Exception):
-        await bot.send_message(chat_id, text)
-    await bot.session.close()
+    try:
+        for chat_id in chat_ids:
+            with contextlib.suppress(Exception):
+                await bot.send_message(chat_id, text)
+    finally:
+        await bot.session.close()
 
 
 @router.get("/me")
@@ -106,10 +110,11 @@ async def activate(body: ActivateBody, user: dict = Depends(get_user)) -> dict:
 
     now = datetime.now(timezone.utc)
     partner = result["partner"]
-    if partner["user_id"]:
-        # Пинг партнёру — в фоне: клиент не должен ждать Telegram API
-        _spawn(_ping_partner(
-            partner["user_id"],
+    recipients = await partners.ping_recipients(partner["id"])
+    if recipients:
+        # Пинг владельцу и кассирам — в фоне: клиент не должен ждать Telegram API
+        _spawn(_ping_partners(
+            recipients,
             t("partner_ping", name=user["full_name"] or "Клиент",
               discount=result["discount"], time=now.strftime("%H:%M")),
         ))

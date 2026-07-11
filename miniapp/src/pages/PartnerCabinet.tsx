@@ -22,7 +22,18 @@ interface Card {
   discount_free: number;
   discount_premium: number;
   is_paused: boolean;
+  is_owner: boolean;
 }
+
+interface Staff {
+  user_id: number;
+  full_name: string | null;
+  username: string | null;
+  added_at: string;
+}
+
+// Пределы «Моей скидки» — как в bot/services/partners.py (10–15, раздел 3.3)
+const DISCOUNTS = [10, 11, 12, 13, 14, 15];
 
 interface Activation {
   full_name: string | null;
@@ -40,6 +51,11 @@ export default function PartnerCabinet() {
   const [code, setCode] = useState('');
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
   const [redeeming, setRedeeming] = useState(false);
+  const [staff, setStaff] = useState<Staff[]>([]);
+  const [staffId, setStaffId] = useState('');
+  const [staffNote, setStaffNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const [staffBusy, setStaffBusy] = useState(false);
+  const [discountNote, setDiscountNote] = useState<{ ok: boolean; text: string } | null>(null);
 
   const load = () => {
     api<Stats>('/partner/stats')
@@ -49,7 +65,13 @@ export default function PartnerCabinet() {
         const forbidden = e instanceof ApiError && (e.status === 401 || e.status === 403);
         setStats(forbidden ? 'forbidden' : 'error');
       });
-    api<Card>('/partner/me').then(setCard).catch(() => {});
+    api<Card>('/partner/me')
+      .then((c) => {
+        setCard(c);
+        // Сотрудники видны и редактируются только владельцем
+        if (c.is_owner) api<Staff[]>('/partner/staff').then(setStaff).catch(() => {});
+      })
+      .catch(() => {});
     api<Activation[]>('/partner/activations').then(setFeed).catch(() => setFeed(null));
   };
   useEffect(load, []);
@@ -81,6 +103,47 @@ export default function PartnerCabinet() {
     }
   };
 
+  const setDiscount = async (value: number) => {
+    if (!card || value === card.discount_premium) return;
+    const prev = card.discount_premium;
+    setDiscountNote(null);
+    setCard((c) => (c ? { ...c, discount_premium: value } : c)); // оптимистично
+    try {
+      await api('/partner/discount', { method: 'POST', body: JSON.stringify({ discount: value }) });
+      setDiscountNote({ ok: true, text: `Скидка подписчикам теперь −${value}%` });
+    } catch (e) {
+      setCard((c) => (c ? { ...c, discount_premium: prev } : c)); // откат
+      setDiscountNote({ ok: false, text: e instanceof ApiError ? String(e.detail) : 'Ошибка сети' });
+    }
+  };
+
+  const addStaff = async () => {
+    setStaffNote(null);
+    setStaffBusy(true);
+    try {
+      await api('/partner/staff', {
+        method: 'POST',
+        body: JSON.stringify({ telegram_id: Number(staffId.trim()) }),
+      });
+      setStaffNote({ ok: true, text: 'Кассир добавлен — пинги активаций теперь приходят и ему' });
+      setStaffId('');
+      api<Staff[]>('/partner/staff').then(setStaff).catch(() => {});
+    } catch (e) {
+      setStaffNote({ ok: false, text: e instanceof ApiError ? String(e.detail) : 'Ошибка сети' });
+    }
+    setStaffBusy(false);
+  };
+
+  const removeStaff = async (userId: number) => {
+    setStaffNote(null);
+    try {
+      await api(`/partner/staff/${userId}`, { method: 'DELETE' });
+      setStaff((s) => s.filter((x) => x.user_id !== userId));
+    } catch (e) {
+      setStaffNote({ ok: false, text: e instanceof ApiError ? String(e.detail) : 'Ошибка сети' });
+    }
+  };
+
   if (stats === 'loading') return <Loader />;
   if (stats === 'error')
     return <ErrorState onRetry={() => { setStats('loading'); load(); }} />;
@@ -99,15 +162,37 @@ export default function PartnerCabinet() {
         <>
           <div className="vg-brand">
             <span className="vg-brand-name">{card.name}</span>
-            <span className="vg-brand-city">кабинет</span>
+            <span className="vg-brand-city">{card.is_owner ? 'кабинет' : 'кабинет кассира'}</span>
           </div>
-          <div className="vg-card" style={{ cursor: 'default' }}>
-            <div className="vg-card-body">
-              <div className="vg-card-name">Пауза («отпуск»)</div>
-              <div className="vg-card-meta">Карточка скрывается из каталога и карты</div>
+          {card.is_owner && (
+            <div className="vg-card" style={{ cursor: 'default' }}>
+              <div className="vg-card-body">
+                <div className="vg-card-name">Пауза («отпуск»)</div>
+                <div className="vg-card-meta">Карточка скрывается из каталога и карты</div>
+              </div>
+              <Switch checked={card.is_paused} onChange={(e) => togglePause(e.target.checked)} />
             </div>
-            <Switch checked={card.is_paused} onChange={(e) => togglePause(e.target.checked)} />
+          )}
+        </>
+      )}
+
+      {card?.is_owner && (
+        <>
+          <div className="vg-h">Моя скидка подписчикам</div>
+          <div className="vg-chips">
+            {DISCOUNTS.map((d) => (
+              <button key={d}
+                      className={`vg-chip ${card.discount_premium === d ? 'is-on' : ''}`}
+                      onClick={() => setDiscount(d)}>
+                −{d}%
+              </button>
+            ))}
           </div>
+          {discountNote && (
+            <div className={`vg-note ${discountNote.ok ? 'is-ok' : 'is-err'}`}>
+              {discountNote.text}
+            </div>
+          )}
         </>
       )}
 
@@ -155,6 +240,45 @@ export default function PartnerCabinet() {
           <div className={`vg-note ${result.ok ? 'is-ok' : 'is-err'}`}>{result.text}</div>
         )}
       </div>
+
+      {card?.is_owner && (
+        <>
+          <div className="vg-h">Сотрудники</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {staff.length > 0 && (
+              <List>
+                <Section>
+                  {staff.map((s) => (
+                    <Cell key={s.user_id}
+                          subtitle={s.username ? `@${s.username}` : `id ${s.user_id}`}
+                          after={
+                            <Button size="s" mode="plain" onClick={() => removeStaff(s.user_id)}>
+                              Удалить
+                            </Button>
+                          }>
+                      {s.full_name ?? 'Кассир'}
+                    </Cell>
+                  ))}
+                </Section>
+              </List>
+            )}
+            <Input placeholder="Telegram ID кассира" value={staffId}
+                   inputMode="numeric"
+                   onChange={(e) => setStaffId(e.target.value.replace(/\D/g, ''))} />
+            <Button stretched loading={staffBusy} disabled={staffId.trim().length < 5}
+                    onClick={addStaff}>
+              Добавить кассира
+            </Button>
+            {staffNote && (
+              <div className={`vg-note ${staffNote.ok ? 'is-ok' : 'is-err'}`}>{staffNote.text}</div>
+            )}
+            <div className="vg-empty" style={{ padding: '4px 2px' }}>
+              Кассир будет получать пинги активаций и сможет гасить коды.
+              Его ID — у @userinfobot; сначала кассир должен запустить нашего бота.
+            </div>
+          </div>
+        </>
+      )}
 
       <div className="vg-h">Последние активации</div>
       {feed === undefined ? (

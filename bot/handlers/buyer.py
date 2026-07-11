@@ -26,7 +26,7 @@ from bot.keyboards import (
     notify_toggle_kb,
     receipt_decision_kb,
 )
-from bot.services import payments, qr, redemption, storage
+from bot.services import partners, payments, qr, redemption, storage
 from bot.texts import t
 
 router = Router(name="buyer")
@@ -178,14 +178,12 @@ async def _activate(message: Message, user: dict, partner_id: int | None) -> Non
     # Живые тикающие часы (анти-скриншот) + авто-истечение через 5 минут.
     _spawn(_tick_screen(screen, render, lang))
 
-    # Пинг партнёру в реальном времени (раздел 3.2).
-    if partner["user_id"]:
+    # Пинг владельцу и кассирам в реальном времени (раздел 3.2).
+    ping_text = t("partner_ping", lang, name=user["full_name"] or "Клиент",
+                  discount=discount, time=now.strftime("%H:%M"))
+    for chat_id in await partners.ping_recipients(partner["id"]):
         with contextlib.suppress(Exception):
-            await message.bot.send_message(
-                partner["user_id"],
-                t("partner_ping", lang, name=user["full_name"] or "Клиент",
-                  discount=discount, time=now.strftime("%H:%M")),
-            )
+            await message.bot.send_message(chat_id, ping_text)
 
 
 async def _tick_screen(screen: Message, render, lang: str) -> None:
