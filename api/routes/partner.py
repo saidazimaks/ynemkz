@@ -124,7 +124,7 @@ async def redeem(body: RedeemBody, user: dict = Depends(require_role("partner", 
 # --- Сотрудники-кассиры (владелец управляет, кассиры получают пинги) -------------
 
 class StaffBody(BaseModel):
-    telegram_id: int
+    query: str  # @username или числовой telegram_id
 
 
 @router.get("/staff")
@@ -138,10 +138,21 @@ async def staff_add(body: StaffBody,
                     user: dict = Depends(require_role("partner", "admin"))) -> dict:
     partner, _ = await _partner_of(user["id"], owner_only=True)
     try:
-        await partners.staff_add(partner["id"], user["id"], body.telegram_id)
+        cashier_id = await partners.resolve_user_id(body.query)
+        await partners.staff_add(partner["id"], user["id"], cashier_id)
     except partners.StaffError as e:
         raise HTTPException(409, str(e))
     return {"ok": True}
+
+
+@router.post("/staff/invite")
+async def staff_invite(user: dict = Depends(require_role("partner", "admin"))) -> dict:
+    """Одноразовый токен приглашения кассира (TTL 24 ч).
+
+    Ссылку t.me/<bot>?start=staff_<token> собирает Mini App (username бота — на фронте).
+    """
+    partner, _ = await _partner_of(user["id"], owner_only=True)
+    return {"token": await partners.create_invite(partner["id"])}
 
 
 @router.delete("/staff/{telegram_id}")

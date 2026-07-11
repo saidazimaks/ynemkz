@@ -1,7 +1,10 @@
 import { useEffect, useState } from 'react';
+import { openTelegramLink } from '@telegram-apps/sdk-react';
 import { Button, Cell, Input, List, Placeholder, Section, Switch } from '@telegram-apps/telegram-ui';
 import { api, ApiError } from './../api';
 import { ErrorState, Loader } from './../hooks';
+
+const BOT = import.meta.env.VITE_BOT_USERNAME as string | undefined;
 
 interface Stats {
   today: number;
@@ -52,9 +55,10 @@ export default function PartnerCabinet() {
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
   const [redeeming, setRedeeming] = useState(false);
   const [staff, setStaff] = useState<Staff[]>([]);
-  const [staffId, setStaffId] = useState('');
+  const [staffQuery, setStaffQuery] = useState('');
   const [staffNote, setStaffNote] = useState<{ ok: boolean; text: string } | null>(null);
   const [staffBusy, setStaffBusy] = useState(false);
+  const [inviteBusy, setInviteBusy] = useState(false);
   const [discountNote, setDiscountNote] = useState<{ ok: boolean; text: string } | null>(null);
 
   const load = () => {
@@ -123,15 +127,30 @@ export default function PartnerCabinet() {
     try {
       await api('/partner/staff', {
         method: 'POST',
-        body: JSON.stringify({ telegram_id: Number(staffId.trim()) }),
+        body: JSON.stringify({ query: staffQuery.trim() }),
       });
       setStaffNote({ ok: true, text: 'Кассир добавлен — пинги активаций теперь приходят и ему' });
-      setStaffId('');
+      setStaffQuery('');
       api<Staff[]>('/partner/staff').then(setStaff).catch(() => {});
     } catch (e) {
       setStaffNote({ ok: false, text: e instanceof ApiError ? String(e.detail) : 'Ошибка сети' });
     }
     setStaffBusy(false);
+  };
+
+  const invite = async () => {
+    // Одноразовая ссылка (24 ч) → шеринг в Telegram: кассир открывает и сразу привязан
+    setStaffNote(null);
+    setInviteBusy(true);
+    try {
+      const { token } = await api<{ token: string }>('/partner/staff/invite', { method: 'POST' });
+      const link = `https://t.me/${BOT}?start=staff_${token}`;
+      const text = `Приглашение кассиром в «${card?.name ?? 'заведение'}» — откройте ссылку`;
+      openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`);
+    } catch (e) {
+      setStaffNote({ ok: false, text: e instanceof ApiError ? String(e.detail) : 'Ошибка сети' });
+    }
+    setInviteBusy(false);
   };
 
   const removeStaff = async (userId: number) => {
@@ -262,19 +281,25 @@ export default function PartnerCabinet() {
                 </Section>
               </List>
             )}
-            <Input placeholder="Telegram ID кассира" value={staffId}
-                   inputMode="numeric"
-                   onChange={(e) => setStaffId(e.target.value.replace(/\D/g, ''))} />
-            <Button stretched loading={staffBusy} disabled={staffId.trim().length < 5}
-                    onClick={addStaff}>
-              Добавить кассира
+            {BOT && (
+              <Button stretched loading={inviteBusy} onClick={invite}>
+                Пригласить по ссылке
+              </Button>
+            )}
+            <Input placeholder="@username кассира" value={staffQuery}
+                   autoCapitalize="none" autoCorrect="off"
+                   onChange={(e) => setStaffQuery(e.target.value)} />
+            <Button stretched mode="bezeled" loading={staffBusy}
+                    disabled={staffQuery.trim().length < 4} onClick={addStaff}>
+              Добавить по @username
             </Button>
             {staffNote && (
               <div className={`vg-note ${staffNote.ok ? 'is-ok' : 'is-err'}`}>{staffNote.text}</div>
             )}
             <div className="vg-empty" style={{ padding: '4px 2px' }}>
-              Кассир будет получать пинги активаций и сможет гасить коды.
-              Его ID — у @userinfobot; сначала кассир должен запустить нашего бота.
+              Проще всего — «Пригласить по ссылке»: отправьте её кассиру в Telegram,
+              он откроет и сразу привязан. Ссылка одноразовая, действует 24 часа.
+              Кассир получает пинги активаций и может гасить коды.
             </div>
           </div>
         </>

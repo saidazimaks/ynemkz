@@ -89,7 +89,32 @@ async def cmd_start(message: Message, command: CommandObject, state: FSMContext)
         await _activate(message, dict(user), _safe_int(payload[2:]))
         return
 
+    # Инвайт-ссылка кассира (staff_<token>) — становится кассиром сразу.
+    if payload.startswith("staff_"):
+        await _join_staff(message, dict(user), payload[6:])
+        return
+
     await message.answer(t("menu_hint", user["lang"]), reply_markup=main_menu_kb(user["lang"]))
+
+
+async def _join_staff(message: Message, user: dict, token: str) -> None:
+    """Принять приглашение кассира по одноразовому токену (миграция 005)."""
+    lang = user["lang"]
+    try:
+        partner = await partners.use_invite(token, user["id"])
+    except partners.StaffError as e:
+        await message.answer(str(e))
+        return
+
+    await message.answer(t("staff_joined", lang, partner=partner["name"]))
+    # Владельцу — уведомление, что кассир присоединился.
+    if partner["user_id"]:
+        with contextlib.suppress(Exception):
+            await message.bot.send_message(
+                partner["user_id"],
+                t("staff_joined_owner", lang,
+                  name=user["full_name"] or user["id"], partner=partner["name"]),
+            )
 
 
 @router.message(Onboarding.consent, F.text)
@@ -130,11 +155,14 @@ async def onboarding_consent(message: Message, state: FSMContext) -> None:
         await _register(None)
     await message.answer(t("registered", lang), reply_markup=main_menu_kb(lang))
 
-    # Продолжаем отложенный deep link активации.
+    # Продолжаем отложенный deep link: активация или приглашение кассира.
     payload = data.get("pending_payload") or ""
-    if payload.startswith("p_"):
+    if payload.startswith(("p_", "staff_")):
         user = await db.fetchrow("SELECT * FROM users WHERE id = $1", message.from_user.id)
-        await _activate(message, dict(user), _safe_int(payload[2:]))
+        if payload.startswith("p_"):
+            await _activate(message, dict(user), _safe_int(payload[2:]))
+        else:
+            await _join_staff(message, dict(user), payload[6:])
 
 
 # --- Экран активации (вариант C) ------------------------------------------------
