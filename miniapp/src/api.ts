@@ -88,6 +88,18 @@ export function apiGet<T>(path: string, { force = false } = {}): Promise<T> {
   return p;
 }
 
+// --- Категории каталога -----------------------------------------------------
+// Канонический список и порядок чипов; должен совпадать с Literal в api/routes/admin.py.
+// Партнёр без категории попадает в «Другое».
+
+export const CATEGORIES = ['Еда', 'Красота', 'Фитнес', 'Развлечения', 'Шопинг'] as const;
+
+/** Порядок чипов: канон по списку, легаси-значения после, «Другое» всегда в конце. */
+export function categoryRank(c: string): number {
+  const i = (CATEGORIES as readonly string[]).indexOf(c);
+  return i >= 0 ? i : c === 'Другое' ? 999 : 500;
+}
+
 // --- Типы ответов ---------------------------------------------------------
 
 export interface Partner {

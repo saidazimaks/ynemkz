@@ -4,10 +4,15 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from typing import Literal
 
 from aiogram import Bot
 from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
+
+# Канонические категории каталога (Mini App показывает их чипами в этом порядке).
+# Не подходит ничего — оставляем NULL, витрина покажет «Другое».
+Category = Literal["Еда", "Красота", "Фитнес", "Развлечения", "Шопинг"]
 
 from api.auth import require_role
 from bot import db
@@ -113,7 +118,7 @@ async def partners_list() -> list[dict]:
 class PartnerCreate(BaseModel):
     name: str
     user_tg_id: int | None = None  # владелец кабинета (получит роль partner)
-    category: str | None = None
+    category: Category | None = None
     address: str | None = None
 
 
@@ -135,7 +140,7 @@ async def partner_create(body: PartnerCreate) -> dict:
 
 class PartnerPatch(BaseModel):
     name: str | None = None
-    category: str | None = None
+    category: Category | None = None
     address: str | None = None
     work_hours: str | None = None
     discount_free: int | None = None

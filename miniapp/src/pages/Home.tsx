@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { openTelegramLink } from '@telegram-apps/sdk-react';
 import { Button, Input } from '@telegram-apps/telegram-ui';
-import { type DailyDeal, type Me, type Partner } from './../api';
+import { categoryRank, type DailyDeal, type Me, type Partner } from './../api';
 import { ErrorState, useCachedApi } from './../hooks';
 
 const BOT = import.meta.env.VITE_BOT_USERNAME as string | undefined;
@@ -66,7 +66,9 @@ export default function Home() {
   const [search, setSearch] = useState('');
 
   const categories = useMemo(
-    () => [...new Set((partners ?? []).map((p) => p.category ?? 'Другое'))],
+    () =>
+      [...new Set((partners ?? []).map((p) => p.category ?? 'Другое'))]
+        .sort((a, b) => categoryRank(a) - categoryRank(b)),
     [partners],
   );
   const shown = (partners ?? []).filter(

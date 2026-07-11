@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Badge, Button, Cell, Input, List, Section, Switch } from '@telegram-apps/telegram-ui';
 import { retrieveRawInitData } from '@telegram-apps/sdk-react';
-import { api, type Partner } from '../../api';
+import { api, CATEGORIES, type Partner } from '../../api';
 import { ErrorState, Loader } from '../../hooks';
 
 interface AdminPartner extends Partner {
@@ -69,7 +69,18 @@ function Editor({ p, onSaved }: { p: AdminPartner; onSaved: () => void }) {
 
   return (
     <div style={{ padding: '4px 16px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <Input header="Категория" value={String(form.category)} onChange={set('category')} placeholder="еда / красота / авто" />
+      <div>
+        <div className="vg-h" style={{ margin: '2px 2px 8px' }}>Категория</div>
+        <div className="vg-chips">
+          {CATEGORIES.map((c) => (
+            <button key={c}
+                    className={`vg-chip ${form.category === c ? 'is-on' : ''}`}
+                    onClick={() => setForm({ ...form, category: c })}>
+              {c}
+            </button>
+          ))}
+        </div>
+      </div>
       <Input header="Адрес" value={String(form.address)} onChange={set('address')} />
       <Input header="Часы работы" value={String(form.work_hours)} onChange={set('work_hours')} placeholder="10:00–22:00" />
       <div style={{ display: 'flex', gap: 8 }}>
