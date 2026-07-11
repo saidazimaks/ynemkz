@@ -5,8 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from api.auth import require_role
+from api.routes.admin import Category
+from api.routes.me import _ping_partners, _spawn
 from bot import db
+from bot.config import settings
 from bot.services import partners, redemption
+from bot.texts import t
 
 router = APIRouter(dependencies=[Depends(require_role("partner", "admin"))])
 
@@ -161,6 +165,47 @@ async def staff_remove(telegram_id: int,
     partner, _ = await _partner_of(user["id"], owner_only=True)
     await partners.staff_remove(partner["id"], telegram_id)
     return {"ok": True}
+
+
+# --- Заявка на изменение карточки (модерация админом) ----------------------------
+
+class EditBody(BaseModel):
+    """Поля, которые партнёр может предложить изменить. Пустые не отправляются."""
+    name: str | None = Field(default=None, min_length=2, max_length=80)
+    category: Category | None = None
+    address: str | None = Field(default=None, min_length=3, max_length=200)
+    work_hours: str | None = Field(default=None, min_length=3, max_length=100)
+    avg_check: int | None = Field(default=None, ge=100, le=1_000_000)
+
+
+@router.get("/edit")
+async def edit_pending(user: dict = Depends(require_role("partner", "admin"))) -> dict | None:
+    """Текущая заявка на модерации — для баннера в кабинете."""
+    partner, _ = await _partner_of(user["id"], owner_only=True)
+    return await partners.pending_edit(partner["id"])
+
+
+@router.post("/edit")
+async def edit_submit(body: EditBody,
+                      user: dict = Depends(require_role("partner", "admin"))) -> dict:
+    partner, _ = await _partner_of(user["id"], owner_only=True)
+    try:
+        edit = await partners.submit_edit(partner["id"], user["id"],
+                                          body.model_dump(exclude_none=True))
+    except partners.EditError as e:
+        raise HTTPException(409, str(e))
+    # Админам — пинг в бот, решение принимается в Mini App
+    if settings.admin_id_set:
+        _spawn(_ping_partners(sorted(settings.admin_id_set),
+                              t("edit_submitted_admin", partner=partner["name"])))
+    edit["created_at"] = edit["created_at"].isoformat()
+    return {"id": edit["id"], "changes": edit["changes"], "created_at": edit["created_at"]}
+
+
+@router.delete("/edit")
+async def edit_cancel(user: dict = Depends(require_role("partner", "admin"))) -> dict:
+    partner, _ = await _partner_of(user["id"], owner_only=True)
+    return {"cancelled": await partners.cancel_edit(partner["id"])}
 
 
 # --- Моя скидка: владелец меняет % для подписчиков в пределах 10–15 --------------

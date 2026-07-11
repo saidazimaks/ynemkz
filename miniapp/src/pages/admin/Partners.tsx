@@ -13,6 +13,57 @@ interface AdminPartner extends Partner {
   lng: number | null;
 }
 
+interface EditRequest {
+  id: number;
+  partner_id: number;
+  partner_name: string;
+  created_at: string;
+  changes: Record<string, string | number>;
+  current: Record<string, string | number | null>;
+}
+
+const EDIT_LABELS: Record<string, string> = {
+  name: 'Название', category: 'Категория', address: 'Адрес',
+  work_hours: 'Часы', avg_check: 'Средний чек',
+};
+
+/** Заявка партнёра на изменение карточки: дифф + одобрить/отклонить. */
+function EditRequestCard({ req, onDecided }: { req: EditRequest; onDecided: () => void }) {
+  const [busy, setBusy] = useState<'approve' | 'reject' | null>(null);
+
+  const decide = async (approve: boolean) => {
+    setBusy(approve ? 'approve' : 'reject');
+    await api(`/admin/partner-edits/${req.id}/decide`, {
+      method: 'POST', body: JSON.stringify({ approve }),
+    }).catch(() => {});
+    setBusy(null);
+    onDecided();
+  };
+
+  return (
+    <div className="vg-card" style={{ cursor: 'default', alignItems: 'flex-start' }}>
+      <div className="vg-card-body">
+        <div className="vg-card-name">{req.partner_name}</div>
+        {Object.entries(req.changes).map(([k, v]) => (
+          <div key={k} className="vg-card-meta">
+            {EDIT_LABELS[k] ?? k}: {String(req.current[k] ?? '—')} → <b>{String(v)}</b>
+          </div>
+        ))}
+        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+          <Button size="s" loading={busy === 'approve'} disabled={busy !== null}
+                  onClick={() => decide(true)}>
+            Применить
+          </Button>
+          <Button size="s" mode="gray" loading={busy === 'reject'} disabled={busy !== null}
+                  onClick={() => decide(false)}>
+            Отклонить
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** Форма-редактор одного партнёра (раскрывается по тапу). */
 function Editor({ p, onSaved }: { p: AdminPartner; onSaved: () => void }) {
   const [form, setForm] = useState({
@@ -121,12 +172,14 @@ function Editor({ p, onSaved }: { p: AdminPartner; onSaved: () => void }) {
 export default function Partners() {
   // undefined — грузим, null — ошибка сети
   const [partners, setPartners] = useState<AdminPartner[] | null | undefined>(undefined);
+  const [edits, setEdits] = useState<EditRequest[]>([]);
   const [open, setOpen] = useState<number | null>(null);
   const [newName, setNewName] = useState('');
   const [creating, setCreating] = useState(false);
 
   const load = () => {
     api<AdminPartner[]>('/admin/partners').then(setPartners).catch(() => setPartners(null));
+    api<EditRequest[]>('/admin/partner-edits').then(setEdits).catch(() => {});
   };
   useEffect(load, []);
 
@@ -145,6 +198,14 @@ export default function Partners() {
 
   return (
     <List>
+      {edits.length > 0 && (
+        <Section header={`Заявки на изменения (${edits.length})`}>
+          <div style={{ padding: '4px 16px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {edits.map((req) => <EditRequestCard key={req.id} req={req} onDecided={load} />)}
+          </div>
+        </Section>
+      )}
+
       <Section header="Новый партнёр">
         <div style={{ padding: '4px 16px 12px', display: 'flex', gap: 8 }}>
           <Input placeholder="Название заведения" value={newName}

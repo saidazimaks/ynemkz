@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import json
 import secrets
 
 import asyncpg
@@ -16,9 +17,17 @@ from bot import db
 DISCOUNT_MIN, DISCOUNT_MAX = 10, 15
 INVITE_TTL_HOURS = 24
 
+# Поля карточки, которые партнёр может менять через заявку (модерация админом).
+# Координаты и логотип — только админ; скидка — отдельный мгновенный механизм.
+EDIT_FIELDS = ("name", "category", "address", "work_hours", "avg_check")
+
 
 class StaffError(Exception):
     """Ошибка бизнес-правила управления кассирами (текст показывается пользователю)."""
+
+
+class EditError(Exception):
+    """Ошибка бизнес-правила заявки на изменение карточки (текст — пользователю)."""
 
 
 async def partner_for_user(user_id: int) -> tuple[dict, bool] | None:
@@ -182,6 +191,103 @@ async def use_invite(token: str, cashier_id: int) -> dict:
         await db.execute("UPDATE staff_invites SET used_by = NULL WHERE token = $1", token)
         raise
     return dict(partner)
+
+
+# --- Заявки на изменение карточки (модерация админом, миграция 006) --------------
+
+async def pending_edit(partner_id: int) -> dict | None:
+    """Текущая заявка заведения на модерации (для баннера в кабинете)."""
+    row = await db.fetchrow(
+        "SELECT * FROM partner_edits WHERE partner_id = $1 AND status = 'pending'",
+        partner_id,
+    )
+    if row is None:
+        return None
+    edit = dict(row)
+    edit["changes"] = json.loads(edit["changes"])  # asyncpg отдаёт jsonb строкой
+    return edit
+
+
+async def submit_edit(partner_id: int, user_id: int, fields: dict) -> dict:
+    """Создать заявку: сохраняются только реально изменившиеся поля из EDIT_FIELDS."""
+    partner = await db.fetchrow("SELECT * FROM partners WHERE id = $1", partner_id)
+    changes = {
+        k: v for k, v in fields.items()
+        if k in EDIT_FIELDS and v is not None and v != partner[k]
+    }
+    if not changes:
+        raise EditError("Изменений нет — карточка и так такая.")
+    try:
+        row = await db.fetchrow(
+            """INSERT INTO partner_edits (partner_id, proposed_by, changes)
+               VALUES ($1, $2, $3::jsonb) RETURNING *""",
+            partner_id, user_id, json.dumps(changes),
+        )
+    except asyncpg.UniqueViolationError:
+        raise EditError("У вас уже есть заявка на модерации — дождитесь решения или отмените её.")
+    edit = dict(row)
+    edit["changes"] = changes
+    return edit
+
+
+async def cancel_edit(partner_id: int) -> bool:
+    res = await db.execute(
+        "DELETE FROM partner_edits WHERE partner_id = $1 AND status = 'pending'", partner_id
+    )
+    return res.endswith("1")
+
+
+async def edits_pending() -> list[dict]:
+    """Очередь заявок для админа: изменения + текущие значения для диффа."""
+    rows = await db.fetch(
+        """
+        SELECT e.id, e.partner_id, e.changes, e.created_at, p.name AS partner_name,
+               p.name AS cur_name, p.category AS cur_category, p.address AS cur_address,
+               p.work_hours AS cur_work_hours, p.avg_check AS cur_avg_check
+        FROM partner_edits e JOIN partners p ON p.id = e.partner_id
+        WHERE e.status = 'pending' ORDER BY e.created_at
+        """
+    )
+    return [
+        {
+            "id": r["id"],
+            "partner_id": r["partner_id"],
+            "partner_name": r["partner_name"],
+            "created_at": r["created_at"],
+            "changes": json.loads(r["changes"]),
+            "current": {k: r[f"cur_{k}"] for k in EDIT_FIELDS},
+        }
+        for r in rows
+    ]
+
+
+async def decide_edit(edit_id: int, admin_id: int, approve: bool) -> dict | None:
+    """Решение админа: одобрить (применить к карточке) или отклонить.
+
+    None — заявка не найдена или уже обработана (гонка двух админов безопасна:
+    статус меняется атомарным UPDATE со условием pending).
+    """
+    row = await db.fetchrow(
+        """UPDATE partner_edits
+           SET status = $2, decided_at = now(), decided_by = $3
+           WHERE id = $1 AND status = 'pending'
+           RETURNING partner_id, changes""",
+        edit_id, "approved" if approve else "rejected", admin_id,
+    )
+    if row is None:
+        return None
+    changes = json.loads(row["changes"])
+    if approve:
+        keys = [k for k in changes if k in EDIT_FIELDS]  # whitelist против кривого jsonb
+        sets = ", ".join(f"{k} = ${i + 2}" for i, k in enumerate(keys))
+        await db.execute(
+            f"UPDATE partners SET {sets} WHERE id = $1",
+            row["partner_id"], *[changes[k] for k in keys],
+        )
+    partner = await db.fetchrow(
+        "SELECT id, name, user_id FROM partners WHERE id = $1", row["partner_id"]
+    )
+    return {"partner": dict(partner), "changes": changes, "approved": approve}
 
 
 async def set_premium_discount(partner_id: int, value: int) -> int:

@@ -18,6 +18,7 @@ from api.auth import require_role
 from bot import db
 from bot.config import settings
 from bot.services import broadcast as broadcast_svc
+from bot.services import partners as partners_svc
 from bot.services import payments, qr
 from bot.texts import t
 
@@ -190,6 +191,35 @@ async def partner_qr_png(partner_id: int) -> Response:
         await bot.session.close()
     png = qr.partner_qr(username, partner_id)
     return Response(content=png, media_type="image/png")
+
+
+# --- Заявки партнёров на изменение карточки (модерация) ---------------------------
+
+@router.get("/partner-edits")
+async def partner_edits() -> list[dict]:
+    """Очередь заявок: изменения + текущие значения для диффа."""
+    return await partners_svc.edits_pending()
+
+
+@router.post("/partner-edits/{edit_id}/decide")
+async def partner_edit_decide(edit_id: int, body: DecideBody,
+                              user: dict = Depends(require_role("admin"))) -> dict:
+    result = await partners_svc.decide_edit(edit_id, user["id"], body.approve)
+    if result is None:
+        raise HTTPException(409, "заявка не найдена или уже обработана")
+
+    # Владельцу — решение в бот
+    owner_id = result["partner"]["user_id"]
+    if owner_id:
+        bot = Bot(token=settings.bot_token)
+        with contextlib.suppress(Exception):
+            await bot.send_message(
+                owner_id,
+                t("edit_approved" if body.approve else "edit_rejected",
+                  partner=result["partner"]["name"]),
+            )
+        await bot.session.close()
+    return {"ok": True}
 
 
 # --- Люди: подписчики, поиск, бан, возвраты ---------------------------------------

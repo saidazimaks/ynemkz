@@ -1,10 +1,16 @@
 import { useEffect, useState } from 'react';
 import { openTelegramLink } from '@telegram-apps/sdk-react';
 import { Button, Cell, Input, List, Placeholder, Section, Switch } from '@telegram-apps/telegram-ui';
-import { api, ApiError } from './../api';
+import { api, ApiError, CATEGORIES } from './../api';
 import { ErrorState, Loader } from './../hooks';
 
 const BOT = import.meta.env.VITE_BOT_USERNAME as string | undefined;
+
+// Человеческие подписи полей заявки (совпадают с EDIT_FIELDS на бэке)
+const EDIT_LABELS: Record<string, string> = {
+  name: 'Название', category: 'Категория', address: 'Адрес',
+  work_hours: 'Часы работы', avg_check: 'Средний чек, ₸',
+};
 
 interface Stats {
   today: number;
@@ -24,6 +30,7 @@ interface Card {
   work_hours: string | null;
   discount_free: number;
   discount_premium: number;
+  avg_check: number | null;
   is_paused: boolean;
   is_owner: boolean;
 }
@@ -33,6 +40,20 @@ interface Staff {
   full_name: string | null;
   username: string | null;
   added_at: string;
+}
+
+interface PendingEdit {
+  id: number;
+  changes: Record<string, string | number>;
+  created_at: string;
+}
+
+interface EditForm {
+  name: string;
+  category: string;
+  address: string;
+  work_hours: string;
+  avg_check: string;
 }
 
 // Пределы «Моей скидки» — как в bot/services/partners.py (10–15, раздел 3.3)
@@ -60,6 +81,10 @@ export default function PartnerCabinet() {
   const [staffBusy, setStaffBusy] = useState(false);
   const [inviteBusy, setInviteBusy] = useState(false);
   const [discountNote, setDiscountNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const [pendingEdit, setPendingEdit] = useState<PendingEdit | null>(null);
+  const [editForm, setEditForm] = useState<EditForm | null>(null);
+  const [editNote, setEditNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const [editBusy, setEditBusy] = useState(false);
 
   const load = () => {
     api<Stats>('/partner/stats')
@@ -72,8 +97,15 @@ export default function PartnerCabinet() {
     api<Card>('/partner/me')
       .then((c) => {
         setCard(c);
-        // Сотрудники видны и редактируются только владельцем
-        if (c.is_owner) api<Staff[]>('/partner/staff').then(setStaff).catch(() => {});
+        setEditForm({
+          name: c.name, category: c.category ?? '', address: c.address ?? '',
+          work_hours: c.work_hours ?? '', avg_check: c.avg_check ? String(c.avg_check) : '',
+        });
+        // Сотрудники и заявка — только владельцу
+        if (c.is_owner) {
+          api<Staff[]>('/partner/staff').then(setStaff).catch(() => {});
+          api<PendingEdit | null>('/partner/edit').then(setPendingEdit).catch(() => {});
+        }
       })
       .catch(() => {});
     api<Activation[]>('/partner/activations').then(setFeed).catch(() => setFeed(null));
@@ -136,6 +168,44 @@ export default function PartnerCabinet() {
       setStaffNote({ ok: false, text: e instanceof ApiError ? String(e.detail) : 'Ошибка сети' });
     }
     setStaffBusy(false);
+  };
+
+  // Поля, реально отличающиеся от текущей карточки (их и отправляем)
+  const editDiff = (): Record<string, string | number> => {
+    if (!editForm || !card) return {};
+    const out: Record<string, string | number> = {};
+    if (editForm.name.trim() && editForm.name.trim() !== card.name) out.name = editForm.name.trim();
+    if (editForm.category && editForm.category !== (card.category ?? '')) out.category = editForm.category;
+    if (editForm.address.trim() && editForm.address.trim() !== (card.address ?? '')) out.address = editForm.address.trim();
+    if (editForm.work_hours.trim() && editForm.work_hours.trim() !== (card.work_hours ?? '')) out.work_hours = editForm.work_hours.trim();
+    const check = Number(editForm.avg_check);
+    if (editForm.avg_check && check !== (card.avg_check ?? 0)) out.avg_check = check;
+    return out;
+  };
+
+  const submitEdit = async () => {
+    setEditNote(null);
+    setEditBusy(true);
+    try {
+      const created = await api<PendingEdit>('/partner/edit', {
+        method: 'POST', body: JSON.stringify(editDiff()),
+      });
+      setPendingEdit(created);
+      setEditNote({ ok: true, text: 'Заявка отправлена админу — изменения появятся после одобрения' });
+    } catch (e) {
+      setEditNote({ ok: false, text: e instanceof ApiError ? String(e.detail) : 'Ошибка сети' });
+    }
+    setEditBusy(false);
+  };
+
+  const cancelEdit = async () => {
+    try {
+      await api('/partner/edit', { method: 'DELETE' });
+      setPendingEdit(null);
+      setEditNote(null);
+    } catch (e) {
+      setEditNote({ ok: false, text: e instanceof ApiError ? String(e.detail) : 'Ошибка сети' });
+    }
   };
 
   const invite = async () => {
@@ -260,8 +330,56 @@ export default function PartnerCabinet() {
         )}
       </div>
 
-      {card?.is_owner && (
+      {card?.is_owner && editForm && (
         <>
+          <div className="vg-h">Моя карточка</div>
+          {pendingEdit ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div className="vg-card" style={{ cursor: 'default' }}>
+                <div className="vg-card-body">
+                  <div className="vg-card-name">Заявка на модерации у админа</div>
+                  {Object.entries(pendingEdit.changes).map(([k, v]) => (
+                    <div key={k} className="vg-card-meta">
+                      {EDIT_LABELS[k] ?? k}: {String(v)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <Button stretched mode="bezeled" onClick={cancelEdit}>Отменить заявку</Button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <Input header="Название" value={editForm.name}
+                     onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+              <div className="vg-chips">
+                {CATEGORIES.map((c) => (
+                  <button key={c}
+                          className={`vg-chip ${editForm.category === c ? 'is-on' : ''}`}
+                          onClick={() => setEditForm({ ...editForm, category: c })}>
+                    {c}
+                  </button>
+                ))}
+              </div>
+              <Input header="Адрес" value={editForm.address}
+                     onChange={(e) => setEditForm({ ...editForm, address: e.target.value })} />
+              <Input header="Часы работы" placeholder="Пн–Вс 10:00–22:00" value={editForm.work_hours}
+                     onChange={(e) => setEditForm({ ...editForm, work_hours: e.target.value })} />
+              <Input header="Средний чек, ₸" inputMode="numeric" value={editForm.avg_check}
+                     onChange={(e) => setEditForm({ ...editForm, avg_check: e.target.value.replace(/\D/g, '') })} />
+              <Button stretched loading={editBusy}
+                      disabled={Object.keys(editDiff()).length === 0} onClick={submitEdit}>
+                Отправить на модерацию
+              </Button>
+              <div className="vg-empty" style={{ padding: '0 2px' }}>
+                Изменения публикуются после одобрения админом. Координаты на карте
+                и логотип меняет админ — напишите ему через «Помощь» в боте.
+              </div>
+            </div>
+          )}
+          {editNote && (
+            <div className={`vg-note ${editNote.ok ? 'is-ok' : 'is-err'}`}>{editNote.text}</div>
+          )}
+
           <div className="vg-h">Сотрудники</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {staff.length > 0 && (

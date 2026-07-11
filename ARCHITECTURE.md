@@ -74,6 +74,15 @@ staff_invites (                        -- инвайт-ссылки кассир
   used_by       bigint FK -> users     -- одноразовость: гасится атомарным UPDATE
 )
 
+partner_edits (                        -- заявки на изменение карточки (миграция 006)
+  id            serial PK,
+  partner_id    int FK -> partners,    -- UNIQUE WHERE pending: одна заявка на модерации
+  proposed_by   bigint FK -> users,
+  changes       jsonb,                 -- поле → новое значение (name/category/address/work_hours/avg_check)
+  status        text,                  -- pending | approved | rejected
+  decided_at    timestamptz, decided_by bigint
+)
+
 subscriptions (
   id            serial PK,
   user_id       bigint FK -> users,
@@ -217,7 +226,7 @@ RETURNING *;
 | Пинги активаций | В реальном времени: имя, скидка, время |
 | Статистика | Сегодня / неделя / месяц; новые vs повторные клиенты |
 | Пауза скидки | Владелец приостанавливает («отпуск»), карточка скрывается из каталога |
-| Моя карточка | Просмотр; % для подписчиков (10–15) владелец меняет сам, остальное — через админа |
+| Моя карточка | % для подписчиков (10–15) владелец меняет сам мгновенно; название/категорию/адрес/часы/чек — заявкой с модерацией админа (partner_edits); координаты и логотип — только админ |
 | Сотрудники | Владелец добавляет кассиров инвайт-ссылкой (одноразовая, 24 ч) или по @username; кассирам — пинги, ввод кода, статистика |
 | Фолбэк-ввод кода | Для варианта A; доступен владельцу и кассирам |
 
@@ -335,11 +344,13 @@ Trade-off: комиссия Telegram ~30% + вывод в валюте (нужн
           POST /api/partner/redeem     POST /api/partner/pause   POST /api/partner/discount
           GET/POST /api/partner/staff  DELETE /api/partner/staff/{telegram_id}
           POST /api/partner/staff/invite (одноразовый токен → t.me/<bot>?start=staff_<token>)
+          GET/POST/DELETE /api/partner/edit (заявка на изменение карточки)
 Админ:    GET /api/admin/stats         GET/POST /api/admin/receipts(+/{id}/decide)
           GET/POST/PATCH /api/admin/partners(+/{id})   GET /api/admin/partners/{id}/qr (PNG)
           GET /api/admin/subscribers?q=                POST /api/admin/users/{id}/ban
           POST /api/admin/subscriptions/{id}/refund    GET/POST /api/admin/daily-deals
           POST /api/admin/broadcast (dry_run → предпросмотр)
+          GET /api/admin/partner-edits                 POST /api/admin/partner-edits/{id}/decide
 ```
 
 ### Бэклог трендов (приоритет сверху вниз)
