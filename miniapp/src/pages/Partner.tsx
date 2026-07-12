@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Placeholder } from '@telegram-apps/telegram-ui';
 import { MapContainer, Marker, TileLayer } from 'react-leaflet';
-import { openLink } from '@telegram-apps/sdk-react';
+import { openLink, qrScanner } from '@telegram-apps/sdk-react';
 import { api, ApiError, type Partner } from './../api';
 import { ErrorState, useMainButton } from './../hooks';
 import { markerIcon } from './leafletIcon';
@@ -14,6 +14,7 @@ export default function PartnerPage() {
   const navigate = useNavigate();
   const [partner, setPartner] = useState<LoadState>('loading');
   const [attempt, setAttempt] = useState(0);
+  const [scanNote, setScanNote] = useState<string | null>(null);
 
   useEffect(() => {
     setPartner('loading');
@@ -37,6 +38,26 @@ export default function PartnerPage() {
 
   // Главное действие — системная кнопка Telegram
   useMainButton('Маршрут в 2GIS', route2gis, { visible: !!loaded });
+
+  const scanSticker = async () => {
+    // Сканер наклейки, не выходя из приложения. Ловим только партнёрские
+    // deep link'и (=p_<id>): активируется то заведение, чей QR отсканирован.
+    setScanNote(null);
+    try {
+      if (!qrScanner.open.isAvailable()) {
+        setScanNote('Сканер здесь недоступен — наведите обычную камеру телефона на QR');
+        return;
+      }
+      const content = await qrScanner.open({
+        text: 'Наведите на QR-наклейку на кассе',
+        capture: (q) => /(?:startapp|start)=p_(\d+)/.test(q),
+      });
+      const m = content ? /(?:startapp|start)=p_(\d+)/.exec(content) : null;
+      if (m) navigate(`/activate/${m[1]}`);
+    } catch {
+      setScanNote('Не удалось открыть сканер — наведите обычную камеру телефона на QR');
+    }
+  };
 
   if (partner === 'loading')
     return (
@@ -107,9 +128,19 @@ export default function PartnerPage() {
         </div>
       )}
 
-      {/* «Маршрут в 2GIS» — системной MainButton внизу */}
-      <div className="vg-empty" style={{ padding: '18px 16px' }}>
-        Для скидки отсканируйте QR на кассе заведения
+      {/* Два пути к скидке; «Маршрут в 2GIS» — системной MainButton внизу */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
+        <Button stretched size="l" onClick={() => void scanSticker()}>
+          Сканировать QR на кассе
+        </Button>
+        <Button stretched size="l" mode="bezeled" onClick={() => navigate('/qr')}>
+          Показать мой QR кассиру
+        </Button>
+        {scanNote && <div className="vg-note is-err">{scanNote}</div>}
+        <div className="vg-empty" style={{ padding: '8px 16px' }}>
+          Скидка активируется любым способом: отсканируйте наклейку на кассе
+          или дайте кассиру отсканировать ваш QR.
+        </div>
       </div>
     </div>
   );
