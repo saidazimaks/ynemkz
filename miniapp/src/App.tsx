@@ -15,8 +15,12 @@ const MapPage = lazy(() => import('./pages/Map'));
 // Кабинеты партнёра и админа нужны единицам — покупатель этот код не качает
 const PartnerCabinet = lazy(() => import('./pages/PartnerCabinet'));
 const Admin = lazy(() => import('./pages/admin'));
+// Персональный QR (qr-code-styling) и экран скана кассира — отдельные чанки
+const MyQr = lazy(() => import('./pages/MyQr'));
+const ScanClient = lazy(() => import('./pages/ScanClient'));
 
-/** startapp=p_123 (наклейка на кассе) → сразу экран активации.
+/** startapp=p_123 (наклейка на кассе) → сразу экран активации;
+ *  startapp=c_<token> (кассир снял QR клиента камерой) → экран скана.
  *  Telegram кладёт параметры запуска во фрагмент URL (#tgWebAppData=...),
  *  а HashRouter считает фрагмент маршрутом — без нормализации первый рендер
  *  попадает на несуществующий путь и экран пуст. */
@@ -30,6 +34,11 @@ function StartParamRedirect() {
         navigate(`/activate/${m[1]}`, { replace: true });
         return;
       }
+      const c = /^c_([A-Za-z0-9_-]+)$/.exec(tgWebAppStartParam ?? '');
+      if (c) {
+        navigate(`/scan/${c[1]}`, { replace: true });
+        return;
+      }
     } catch { /* вне Telegram */ }
     if (window.location.hash.includes('tgWebApp')) navigate('/', { replace: true });
   }, [navigate]);
@@ -40,7 +49,7 @@ function StartParamRedirect() {
 function SystemBack() {
   const location = useLocation();
   const navigate = useNavigate();
-  const deep = /^\/(partners|activate)\//.test(location.pathname);
+  const deep = /^\/(partners|activate|scan)\//.test(location.pathname) || location.pathname === '/qr';
 
   useEffect(() => {
     if (!deep) return;
@@ -72,7 +81,8 @@ function Nav({ role }: { role: Me['role'] | null }) {
     return base;
   }, [role]);
 
-  if (location.pathname.startsWith('/activate')) return null; // на экране активации таббар мешает
+  // На полноэкранных экранах (активация, скан кассира, мой QR) таббар мешает
+  if (/^\/(activate|scan|qr)/.test(location.pathname)) return null;
 
   return (
     <Tabbar className="vg-tabbar">
@@ -114,6 +124,8 @@ export default function App() {
           <Route path="/map" element={<MapPage />} />
           <Route path="/activate/:partnerId" element={<Activate />} />
           <Route path="/profile" element={<Profile me={me} onChange={onChange} />} />
+          <Route path="/qr" element={<MyQr me={me} />} />
+          <Route path="/scan/:token" element={<ScanClient />} />
           <Route path="/cabinet" element={<PartnerCabinet />} />
           <Route path="/admin" element={<Admin />} />
           {/* Фолбэк: незнакомый путь (в т.ч. служебный фрагмент Telegram) → главная */}

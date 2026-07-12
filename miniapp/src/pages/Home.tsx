@@ -4,6 +4,7 @@ import { openTelegramLink } from '@telegram-apps/sdk-react';
 import { Button, Input } from '@telegram-apps/telegram-ui';
 import { categoryRank, type DailyDeal, type Me, type Partner } from './../api';
 import { ErrorState, useCachedApi } from './../hooks';
+import { QrIcon } from './../icons';
 
 const BOT = import.meta.env.VITE_BOT_USERNAME as string | undefined;
 
@@ -81,6 +82,12 @@ export default function Home() {
     <div className="vg-brand">
       <span className="vg-brand-name">Ynem</span>
       <span className="vg-brand-city">Экибастуз</span>
+      {/* Быстрый доступ к персональному QR — то, что достают у кассы */}
+      {me && (
+        <button className="vg-qr-fab" aria-label="Мой QR" onClick={() => navigate('/qr')}>
+          <QrIcon />
+        </button>
+      )}
     </div>
   );
 

@@ -99,6 +99,26 @@ button, input, textarea, select {
   color: var(--tgui--hint_color, #8a8a8e);
 }
 
+/* Кнопка «Мой QR» в шапке главной: под рукой у кассы */
+.vg-qr-fab {
+  margin-left: auto;
+  align-self: center;
+  width: 38px;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 12px;
+  background: var(--vg-grad);
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(255, 94, 43, 0.35);
+  transition: transform 0.12s ease;
+}
+.vg-qr-fab:active { transform: scale(0.92); }
+.vg-qr-fab svg { width: 21px; height: 21px; }
+
 .vg-h {
   font-family: var(--vg-font-display);
   font-weight: 700;
@@ -453,6 +473,77 @@ button, input, textarea, select {
   color: #ffb36b;
   text-decoration: underline;
   cursor: pointer;
+}
+
+/* --- Персональный QR клиента ----------------------------------- */
+
+.vg-qr {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  padding: 24px;
+  background: linear-gradient(180deg, #23262d 0%, var(--vg-coal) 70%);
+  color: var(--vg-on-coal);
+}
+.vg-qr.is-premium {
+  background:
+    radial-gradient(130% 90% at 50% -12%, rgba(255, 138, 30, 0.32), transparent 58%),
+    radial-gradient(100% 70% at 50% 118%, rgba(255, 94, 43, 0.2), transparent 60%),
+    var(--vg-coal);
+}
+
+.vg-qr-badge {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--vg-on-coal-dim);
+  border: 1px solid rgba(245, 241, 234, 0.25);
+  border-radius: 99px;
+  padding: 4px 12px;
+}
+.vg-qr.is-premium .vg-qr-badge {
+  color: #ffb36b;
+  border-color: rgba(255, 179, 107, 0.4);
+}
+
+.vg-qr-name {
+  font-weight: 700;
+  font-size: 19px;
+  margin-bottom: 8px;
+}
+
+/* Градиентная рамка вокруг белой карточки с QR: у подписчиков — бренд,
+   без подписки — едва заметная серая */
+.vg-qr-frame {
+  padding: 3px;
+  border-radius: 31px;
+  background: rgba(245, 241, 234, 0.16);
+}
+.vg-qr.is-premium .vg-qr-frame {
+  background: var(--vg-grad);
+  box-shadow: 0 14px 44px rgba(255, 94, 43, 0.28);
+}
+
+.vg-qr-card {
+  background: #fff;
+  border-radius: 28px;
+  padding: 16px;
+  line-height: 0; /* убирает щель под inline-svg */
+}
+
+.vg-qr-note {
+  margin-top: 10px;
+  max-width: 300px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--vg-on-coal-dim);
 }
 
 /* --- Профиль --------------------------------------------------- */

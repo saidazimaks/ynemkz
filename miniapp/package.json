@@ -13,6 +13,7 @@
     "@telegram-apps/sdk-react": "^3.3.9",
     "@telegram-apps/telegram-ui": "^2.1.13",
     "leaflet": "^1.9.4",
+    "qr-code-styling": "^1.9.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-leaflet": "^4.2.1",

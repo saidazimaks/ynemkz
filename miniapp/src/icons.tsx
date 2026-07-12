@@ -49,6 +49,17 @@ export function ChartIcon() {
   );
 }
 
+export function QrIcon() {
+  return (
+    <svg {...base}>
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+      <path d="M14 14h3v3h-3zM21 14v.01M14 21h.01M18 18h3v3h-3z" />
+    </svg>
+  );
+}
+
 export function GearIcon() {
   return (
     <svg {...base}>

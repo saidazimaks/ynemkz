@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Button, Cell, List, Placeholder, Section, Switch } from '@telegram-apps/telegram-ui';
 import { invoice, openTelegramLink } from '@telegram-apps/sdk-react';
 import { api, type Me, type Visit } from './../api';
 import { useCountUp, useMainButton } from './../hooks';
+import { QrIcon } from './../icons';
 
 const BOT = import.meta.env.VITE_BOT_USERNAME as string | undefined;
 
@@ -10,6 +12,7 @@ export default function Profile({ me, onChange }: {
   me: Me | null | undefined;
   onChange: (m: Me) => void;
 }) {
+  const navigate = useNavigate();
   // undefined — история грузится, null — не загрузилась (секцию скрываем без шума)
   const [visits, setVisits] = useState<Visit[] | null | undefined>(undefined);
   const [paying, setPaying] = useState(false);
@@ -22,8 +25,10 @@ export default function Profile({ me, onChange }: {
   // Набегающая сумма — эмоциональный центр экрана
   const savedAnimated = useCountUp(me?.saved ?? 0);
 
-  // Главное действие экрана — системная кнопка Telegram
-  const canPay = !!me && !me.subscription.active && !me.subscription.pending;
+  // Главное действие экрана — системная кнопка Telegram.
+  // Pending-заявка Kaspi не блокирует Stars: оплата мгновенная, а чек админ
+  // рассмотрит отдельно (approve при активной подписке = продление со стекингом).
+  const canPay = !!me && !me.subscription.active;
   useMainButton('Оплатить Stars — мгновенно', () => void payStars(), {
     visible: canPay,
     loading: paying,
@@ -96,6 +101,16 @@ export default function Profile({ me, onChange }: {
         </div>
       </div>
 
+      {/* Персональный QR — кассир сканирует его на кассе, визит пишется сразу */}
+      <div className="vg-card" onClick={() => navigate('/qr')} style={{ marginTop: 10 }}>
+        <div className="vg-logo"><QrIcon /></div>
+        <div className="vg-card-body">
+          <div className="vg-card-name">Мой QR</div>
+          <div className="vg-card-meta">Покажите кассиру — скидка запишется сразу</div>
+        </div>
+        <span className="vg-pct">›</span>
+      </div>
+
       <div className="vg-h">Подписка</div>
 
       {sub.active ? (
@@ -112,7 +127,9 @@ export default function Profile({ me, onChange }: {
         <div className="vg-card" style={{ cursor: 'default' }}>
           <div className="vg-card-body">
             <div className="vg-card-name">Заявка в обработке</div>
-            <div className="vg-card-meta">Чек на проверке у админа</div>
+            <div className="vg-card-meta">
+              Чек на проверке у админа. Не хотите ждать — оплатите Stars, подписка включится сразу.
+            </div>
           </div>
         </div>
       ) : (

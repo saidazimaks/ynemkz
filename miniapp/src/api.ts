@@ -60,6 +60,18 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   return res.json();
 }
 
+/** GET бинарного ответа (аватар для QR): null — нет фото или нет сети. */
+export async function apiBlob(path: string): Promise<Blob | null> {
+  try {
+    const res = await fetch(`${BASE}/api${path}`, {
+      headers: { Authorization: `tma ${initDataRaw}` },
+    });
+    return res.ok ? await res.blob() : null;
+  } catch {
+    return null;
+  }
+}
+
 // --- Кэш GET в памяти (TTL): между вкладками не гоняем одни и те же запросы --
 // sessionStorage выше даёт мгновенный рендер из прошлого ответа, но фоновый
 // refetch раньше уходил при каждом монтировании экрана. Здесь: ответ моложе
@@ -133,6 +145,15 @@ export interface Me {
   visits: number;
   saved: number;
   daily_sign: string;
+  qr_token: string;
+}
+
+/** Результат скана QR клиента кассиром (POST /partner/scan). */
+export interface ScanResult {
+  client_name: string | null;
+  discount: number;
+  kind: 'daily' | 'premium';
+  partner_name: string;
 }
 
 export interface Visit {

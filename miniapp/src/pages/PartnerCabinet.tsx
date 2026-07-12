@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { openTelegramLink } from '@telegram-apps/sdk-react';
 import { Button, Cell, Input, List, Placeholder, Section, Switch } from '@telegram-apps/telegram-ui';
 import { api, ApiError, CATEGORIES } from './../api';
 import { ErrorState, Loader } from './../hooks';
+import { scanClientQr } from './ScanClient';
 
 const BOT = import.meta.env.VITE_BOT_USERNAME as string | undefined;
 
@@ -68,7 +70,9 @@ interface Activation {
 type StatsState = Stats | 'loading' | 'forbidden' | 'error';
 
 export default function PartnerCabinet() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState<StatsState>('loading');
+  const [scanNote, setScanNote] = useState<string | null>(null);
   const [card, setCard] = useState<Card | null>(null);
   // undefined — лента грузится, null — не загрузилась
   const [feed, setFeed] = useState<Activation[] | null | undefined>(undefined);
@@ -111,6 +115,17 @@ export default function PartnerCabinet() {
     api<Activation[]>('/partner/activations').then(setFeed).catch(() => setFeed(null));
   };
   useEffect(load, []);
+
+  const scanClient = async () => {
+    // Системный сканер Telegram; недоступен (десктоп/старый клиент) — фолбэк-код ниже
+    setScanNote(null);
+    try {
+      const opened = await scanClientQr(navigate);
+      if (!opened) setScanNote('Сканер недоступен на этом устройстве — введите код клиента ниже');
+    } catch {
+      setScanNote('Не удалось открыть сканер — введите код клиента ниже');
+    }
+  };
 
   const redeem = async () => {
     setResult(null);
@@ -316,6 +331,18 @@ export default function PartnerCabinet() {
           </div>
         </>
       )}
+
+      <div className="vg-h">QR клиента</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <Button stretched size="l" onClick={() => void scanClient()}>
+          Сканировать QR клиента
+        </Button>
+        {scanNote && <div className="vg-note is-err">{scanNote}</div>}
+        <div className="vg-empty" style={{ padding: '0 2px' }}>
+          Клиент показывает «Мой QR» из профиля — скидка и визит запишутся сразу,
+          клиенту сканировать ничего не нужно.
+        </div>
+      </div>
 
       <div className="vg-h">Код клиента (фолбэк)</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

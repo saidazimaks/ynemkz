@@ -3,10 +3,11 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import io
 from datetime import datetime, timezone
 
 from aiogram import Bot
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Response
 from pydantic import BaseModel
 
 from api.auth import get_user
@@ -44,6 +45,21 @@ async def _ping_partners(chat_ids: list[int], text: str) -> None:
         await bot.session.close()
 
 
+async def _ensure_qr_token(user: dict) -> str:
+    """Токен персонального QR — лениво при первом запросе профиля.
+
+    COALESCE решает гонку двух параллельных /me: побеждает первый токен.
+    user из auth-кэша (5 мин) может не знать о токене — тогда лишний UPDATE
+    вернёт уже существующий.
+    """
+    if user.get("qr_token"):
+        return user["qr_token"]
+    return await db.fetchval(
+        "UPDATE users SET qr_token = coalesce(qr_token, $2) WHERE id = $1 RETURNING qr_token",
+        user["id"], qr.gen_client_token(),
+    )
+
+
 @router.get("/me")
 async def me(user: dict = Depends(get_user)) -> dict:
     sub = await payments.active_subscription(user["id"])
@@ -64,7 +80,30 @@ async def me(user: dict = Depends(get_user)) -> dict:
         "visits": visits,
         "saved": saved,
         "daily_sign": qr.daily_sign(),
+        "qr_token": await _ensure_qr_token(user),
     }
+
+
+@router.get("/me/avatar")
+async def my_avatar(user: dict = Depends(get_user)) -> Response:
+    """Фото профиля Telegram — центр персонального QR (вариант D, раздел 3.2).
+
+    Байты отдаём сами: прямые file-ссылки Telegram содержат токен бота.
+    """
+    bot = _bot()
+    try:
+        photos = await bot.get_user_profile_photos(user["id"], limit=1)
+        if not photos.photos:
+            raise HTTPException(404, "no avatar")
+        sizes = photos.photos[0]
+        # Средний размер (~320px) — достаточно для центра QR, не тянем оригинал
+        size = sizes[1] if len(sizes) > 1 else sizes[0]
+        buf = io.BytesIO()
+        await bot.download(size.file_id, destination=buf)
+    finally:
+        await bot.session.close()
+    return Response(buf.getvalue(), media_type="image/jpeg",
+                    headers={"Cache-Control": "private, max-age=86400"})
 
 
 @router.get("/me/visits")

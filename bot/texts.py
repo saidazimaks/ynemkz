@@ -73,6 +73,7 @@ TEXTS: dict[str, dict[str, str]] = {
         ),
         "activation_expired": "⏱ Экран активации истёк. Отсканируйте QR на кассе заново.",
         "partner_ping": "🔔 {name} активировал(а) скидку {discount}%, {time}",
+        "qr_scan_ping": "✅ Кассир «{partner}» записал ваш визит — скидка −{discount}%. Приятного визита!",
         "partner_menu": (
             "Кабинет партнёра:\n"
             "/code — ввести код клиента\n"

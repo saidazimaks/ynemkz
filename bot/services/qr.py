@@ -23,6 +23,14 @@ def gen_code(length: int = 6) -> str:
     return "".join(secrets.choice(_ALPHABET) for _ in range(length))
 
 
+def gen_client_token() -> str:
+    """Токен персонального QR клиента (вариант D, раздел 3.2).
+
+    URL-safe алфавит [A-Za-z0-9_-] — токен целиком влезает в startapp=c_<token>.
+    """
+    return secrets.token_urlsafe(9)  # 12 символов
+
+
 def partner_qr(bot_username: str, partner_id: int, app_name: str = "app") -> bytes:
     """PNG QR-кода наклейки: Direct Link в Mini App на экран активации.
 

@@ -1,5 +1,7 @@
-"""Кабинет партнёра: статистика, погашение фолбэк-кода, сотрудники, скидка."""
+"""Кабинет партнёра: статистика, скан QR клиента, фолбэк-код, сотрудники, скидка."""
 from __future__ import annotations
+
+import re
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -108,6 +110,49 @@ async def set_pause(body: PauseBody,
     await db.execute("UPDATE partners SET is_paused = $2 WHERE id = $1",
                      partner["id"], body.paused)
     return {"is_paused": body.paused}
+
+
+class ScanBody(BaseModel):
+    qr: str  # содержимое QR: deep link t.me/...startapp=c_<token> или голый токен
+
+
+@router.post("/scan")
+async def scan(body: ScanBody, user: dict = Depends(require_role("partner", "admin"))) -> dict:
+    """Кассир сканирует персональный QR клиента (вариант D, раздел 3.2).
+
+    Зеркало POST /api/activate: те же правила (подписка / партнёр дня /
+    лимит 1 визит в день), но активацию запускает кассир — клиенту ничего
+    сканировать не нужно, ему уходит подтверждение в бот.
+    """
+    partner, _ = await _partner_of(user["id"])
+    m = re.search(r"c_([A-Za-z0-9_-]{8,64})", body.qr.strip())
+    token = m.group(1) if m else body.qr.strip()
+    client = await db.fetchrow(
+        "SELECT id, full_name, is_banned FROM users WHERE qr_token = $1", token
+    )
+    if client is None:
+        raise HTTPException(404, "QR не распознан — это не код клиента Ynem")
+    if client["is_banned"]:
+        raise HTTPException(403, "клиент заблокирован в клубе")
+
+    try:
+        result = await redemption.activate(client["id"], partner["id"])
+    except redemption.NeedSubscription:
+        raise HTTPException(402, "у клиента нет подписки — сегодня скидка ему здесь недоступна")
+    except redemption.RedeemError as e:
+        raise HTTPException(409, str(e))
+
+    # Подтверждение клиенту в бот — в фоне, кассир не ждёт Telegram API
+    _spawn(_ping_partners(
+        [client["id"]],
+        t("qr_scan_ping", partner=partner["name"], discount=result["discount"]),
+    ))
+    return {
+        "client_name": client["full_name"],
+        "discount": result["discount"],
+        "kind": result["kind"],
+        "partner_name": partner["name"],
+    }
 
 
 class RedeemBody(BaseModel):
