@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Button, List, Section, Textarea } from '@telegram-apps/telegram-ui';
+import { useEffect, useState } from 'react';
+import { Badge, Button, Cell, List, Section, Textarea } from '@telegram-apps/telegram-ui';
 import { api } from '../../api';
 import { Chips } from './chips';
 
@@ -11,6 +11,18 @@ const SEGMENTS: { id: Segment; label: string }[] = [
   { id: 'expired', label: 'Истёкшие' },
 ];
 
+const SEGMENT_LABEL: Record<string, string> = {
+  all: 'все', subscribers: 'подписчики', expired: 'истёкшие',
+};
+
+interface BroadcastLog {
+  id: number;
+  text: string;
+  segment: string | null;
+  sent_at: string | null;
+  sent_count: number | null;
+}
+
 /** Рассылка: сегмент → текст → предпросмотр с числом получателей → отправка. */
 export default function Broadcast() {
   const [segment, setSegment] = useState<Segment>('all');
@@ -18,6 +30,11 @@ export default function Broadcast() {
   const [recipients, setRecipients] = useState<number | null>(null);
   const [status, setStatus] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [history, setHistory] = useState<BroadcastLog[]>([]);
+
+  const loadHistory = () =>
+    api<BroadcastLog[]>('/admin/broadcasts').then(setHistory).catch(() => {});
+  useEffect(() => { loadHistory(); }, []);
 
   const preview = async () => {
     setBusy(true);
@@ -44,6 +61,7 @@ export default function Broadcast() {
       setStatus({ ok: true, text: `Отправляется ${r.recipients} получателям (батчами, займёт время).` });
       setText('');
       setRecipients(null);
+      loadHistory();
     } catch {
       setStatus({ ok: false, text: 'Ошибка отправки — попробуйте ещё раз' });
     }
@@ -79,6 +97,20 @@ export default function Broadcast() {
             <div className={`vg-note ${status.ok ? 'is-ok' : 'is-err'}`}>{status.text}</div>
           )}
         </div>
+      </Section>
+
+      <Section header="Последние рассылки"
+               footer="Рассылка идёт в фоне — свежая появится в списке после завершения.">
+        {history.length === 0 && (
+          <div className="vg-empty">Рассылок ещё не было</div>
+        )}
+        {history.map((b) => (
+          <Cell key={b.id}
+                subtitle={`${b.sent_at ? new Date(b.sent_at).toLocaleString('ru-RU') : '—'} · ${SEGMENT_LABEL[b.segment ?? ''] ?? '—'}`}
+                after={b.sent_count != null && <Badge type="number">{b.sent_count}</Badge>}>
+            {b.text.length > 80 ? `${b.text.slice(0, 80)}…` : b.text}
+          </Cell>
+        ))}
       </Section>
     </List>
   );

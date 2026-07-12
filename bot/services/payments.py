@@ -131,6 +131,68 @@ async def approve_stars(user_id: int, charge_id: str, amount_stars: int) -> dict
     return dict(row)
 
 
+async def grant_manual(user_id: int, days: int, admin_id: int) -> dict:
+    """Ручная выдача/продление подписки админом (наличные, промо, компенсация).
+
+    Стекинг как в approve_stars: активная подписка продлевается
+    (GREATEST(expires_at, now()) + N дней) — payment_method и amount
+    НЕ трогаем, чтобы Kaspi/Stars-подписка не «превратилась» в manual
+    (сломались бы бейджи и кнопка возврата Stars). Без активной — новая
+    строка payment_method='manual', amount=0.
+    """
+    now = datetime.now(timezone.utc)
+    row = await db.fetchrow(
+        """
+        UPDATE subscriptions
+        SET expires_at = GREATEST(expires_at, $2) + make_interval(days => $3)
+        WHERE id = (SELECT id FROM subscriptions
+                    WHERE user_id = $1 AND status = 'active' AND expires_at > $2
+                    ORDER BY expires_at DESC LIMIT 1)
+        RETURNING *
+        """,
+        user_id,
+        now,
+        days,
+    )
+    if row:
+        return dict(row)
+
+    row = await db.fetchrow(
+        """
+        INSERT INTO subscriptions (user_id, status, amount, paid_at, expires_at,
+                                   payment_method, confirmed_by)
+        VALUES ($1, 'active', 0, $2, $2 + make_interval(days => $3), 'manual', $4)
+        RETURNING *
+        """,
+        user_id,
+        now,
+        days,
+        admin_id,
+    )
+    return dict(row)
+
+
+async def cancel_active(user_id: int, admin_id: int) -> dict | None:
+    """Отменить активную подписку любого метода: status='expired' (scheduler и
+    сегмент рассылки «Истёкшие» уже оперируют этим статусом). Stars-возврат —
+    отдельное действие refund_stars; здесь звёзды НЕ возвращаются.
+
+    Гасит все активные строки пользователя разом (обычно одна благодаря
+    стекингу). None — активной подписки нет.
+    """
+    rows = await db.fetch(
+        """
+        UPDATE subscriptions
+        SET status = 'expired', expires_at = now(), confirmed_by = $2
+        WHERE user_id = $1 AND status = 'active' AND expires_at > now()
+        RETURNING *
+        """,
+        user_id,
+        admin_id,
+    )
+    return dict(rows[0]) if rows else None
+
+
 async def refund_stars(bot, subscription_id: int) -> dict:
     """Возврат Stars-платежа: звёзды назад, подписка гаснет. Бросает ValueError.
 
@@ -173,7 +235,8 @@ async def apply_referral_bonus(user_id: int) -> int | None:
         """
         SELECT u.referrer_id,
                (SELECT count(*) FROM subscriptions
-                WHERE user_id = u.id AND status IN ('active', 'expired')) AS paid_count
+                WHERE user_id = u.id AND status IN ('active', 'expired')
+                  AND payment_method <> 'manual') AS paid_count
         FROM users u WHERE u.id = $1
         """,
         user_id,

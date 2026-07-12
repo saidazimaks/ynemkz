@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
-import { Badge, Button, Cell, Input, List, Section, Switch } from '@telegram-apps/telegram-ui';
+import { useEffect, useRef, useState } from 'react';
+import { Badge, Button, Cell, Image, Input, List, Section, Switch } from '@telegram-apps/telegram-ui';
 import { retrieveRawInitData } from '@telegram-apps/sdk-react';
-import { api, CATEGORIES, type Partner } from '../../api';
+import { api, ApiError, apiUpload, CATEGORIES, type Partner } from '../../api';
 import { ErrorState, Loader } from '../../hooks';
 
 interface AdminPartner extends Partner {
@@ -75,6 +75,27 @@ function Editor({ p, onSaved }: { p: AdminPartner; onSaved: () => void }) {
   const [qrUrl, setQrUrl] = useState('');
   const [qrError, setQrError] = useState('');
   const [busy, setBusy] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [logoNote, setLogoNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const [logoBusy, setLogoBusy] = useState(false);
+
+  const uploadLogo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = ''; // повторный выбор того же файла снова триггерит onChange
+    if (!f) return;
+    setLogoBusy(true);
+    setLogoNote(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', f);
+      await apiUpload(`/admin/partners/${p.id}/logo`, fd);
+      setLogoNote({ ok: true, text: 'Логотип обновлён' });
+      onSaved();
+    } catch (err) {
+      setLogoNote({ ok: false, text: err instanceof ApiError ? String(err.detail) : 'Ошибка сети' });
+    }
+    setLogoBusy(false);
+  };
 
   const save = async () => {
     setBusy(true);
@@ -152,10 +173,18 @@ function Editor({ p, onSaved }: { p: AdminPartner; onSaved: () => void }) {
         Пауза (партнёр в отпуске)
       </Cell>
 
-      <div style={{ display: 'flex', gap: 8 }}>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
         <Button size="s" loading={busy} onClick={save}>Сохранить</Button>
         <Button size="s" mode="gray" onClick={showQr}>QR-наклейка</Button>
+        <Button size="s" mode="gray" loading={logoBusy}
+                onClick={() => fileRef.current?.click()}>
+          Логотип
+        </Button>
+        {p.logo_url && <Image src={p.logo_url} size={40} />}
       </div>
+      <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
+             onChange={uploadLogo} />
+      {logoNote && <div className={`vg-note ${logoNote.ok ? 'is-ok' : 'is-err'}`}>{logoNote.text}</div>}
       {qrError && <div className="vg-note is-err">{qrError}</div>}
       {qrUrl && (
         <div style={{ textAlign: 'center' }}>

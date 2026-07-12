@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, Cell, Image, List, Placeholder, Section } from '@telegram-apps/telegram-ui';
+import { Badge, Button, Cell, Image, List, Placeholder, Section } from '@telegram-apps/telegram-ui';
 import { api, ApiError } from '../../api';
 import { ErrorState, Loader } from '../../hooks';
 
@@ -17,6 +17,22 @@ interface AdminStats {
   users_total: number; users_today: number;
   subs_active: number; subs_pending: number;
   visits_today: number; visits_month: number;
+  top_partners: { id: number; name: string; visits: number; unique_visitors: number }[];
+  visits_by_day: { day: string; visits: number }[];
+  subs_by_day: { day: string; subs: number }[];
+}
+
+/** Бар-чарт по дням — тот же паттерн, что в кабинете партнёра (.vg-bars). */
+function Bars({ data }: { data: { day: string; value: number }[] }) {
+  const max = Math.max(...data.map((d) => d.value), 1);
+  return (
+    <div className="vg-bars" style={{ margin: '0 16px' }}>
+      {data.map((d) => (
+        <div key={d.day} title={`${d.day}: ${d.value}`}
+             style={{ height: `${(d.value / max) * 100}%` }} />
+      ))}
+    </div>
+  );
 }
 
 type ReceiptsState = Receipt[] | 'loading' | 'forbidden' | 'error';
@@ -81,6 +97,31 @@ export default function Overview() {
             <div className="vg-stat-cap">визитов за месяц</div>
           </div>
         </div>
+      )}
+
+      {stats && stats.visits_by_day.length > 0 && (
+        <>
+          <div className="vg-h" style={{ margin: '18px 18px 10px' }}>Визиты за 30 дней</div>
+          <Bars data={stats.visits_by_day.map((d) => ({ day: d.day, value: d.visits }))} />
+        </>
+      )}
+      {stats && stats.subs_by_day.length > 0 && (
+        <>
+          <div className="vg-h" style={{ margin: '18px 18px 10px' }}>Новые подписки за 30 дней</div>
+          <Bars data={stats.subs_by_day.map((d) => ({ day: d.day, value: d.subs }))} />
+        </>
+      )}
+
+      {stats && stats.top_partners.length > 0 && (
+        <Section header="Топ партнёров за 30 дней">
+          {stats.top_partners.map((p) => (
+            <Cell key={p.id}
+                  subtitle={`${p.unique_visitors} уникальных`}
+                  after={<Badge type="number" mode="primary">{p.visits}</Badge>}>
+              {p.name}
+            </Cell>
+          ))}
+        </Section>
       )}
 
       <Section header={`Очередь чеков (${receipts.length})`}>

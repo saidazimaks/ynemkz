@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Badge, Button, Cell, Input, List, Section } from '@telegram-apps/telegram-ui';
-import { api } from '../../api';
+import { api, ApiError } from '../../api';
 import { ErrorState, Loader } from '../../hooks';
+
+type PayMethod = 'kaspi' | 'stars' | 'manual';
 
 interface AdminUser {
   id: number;
@@ -15,12 +17,43 @@ interface AdminUser {
   // Активная подписка, если есть
   sub_id: number | null;
   expires_at: string | null;
-  payment_method: 'kaspi' | 'stars' | null;
+  payment_method: PayMethod | null;
 }
 
 interface UsersResponse {
   total: number;
   users: AdminUser[];
+}
+
+interface UserVisit {
+  name: string;
+  used_at: string;
+  discount: number;
+}
+
+interface UserSub {
+  id: number;
+  status: 'pending' | 'active' | 'expired' | 'rejected' | 'refunded';
+  payment_method: PayMethod;
+  amount: number;
+  created_at: string;
+  paid_at: string | null;
+  expires_at: string | null;
+}
+
+interface UserDetail {
+  id: number;
+  full_name: string | null;
+  username: string | null;
+  phone: string | null;
+  role: AdminUser['role'];
+  is_banned: boolean;
+  created_at: string;
+  referrer_name: string | null;
+  referrer_username: string | null;
+  invited: number;
+  visits: UserVisit[];
+  subs: UserSub[];
 }
 
 type Filter = 'all' | 'subs' | 'free' | 'banned';
@@ -36,12 +69,148 @@ const ROLE_LABEL: Record<AdminUser['role'], string> = {
   buyer: '', partner: 'партнёр', admin: 'админ',
 };
 
+const METHOD_LABEL: Record<PayMethod, string> = {
+  kaspi: 'Kaspi', stars: 'Stars', manual: 'Вручную',
+};
+
+const STATUS_LABEL: Record<UserSub['status'], string> = {
+  pending: 'на проверке', active: 'активна', expired: 'истекла',
+  rejected: 'отклонена', refunded: 'возврат',
+};
+
+const GRANT_PRESETS = [7, 30, 90];
+
+const dateRu = (s: string | null) => (s ? new Date(s).toLocaleDateString('ru-RU') : '—');
+
+/** Карточка пользователя: профиль, визиты, подписки, ручная выдача/отмена. */
+function UserCard({ u, onAction }: { u: AdminUser; onAction: () => void }) {
+  // undefined — грузим, null — не загрузилась
+  const [detail, setDetail] = useState<UserDetail | null | undefined>(undefined);
+  const [days, setDays] = useState('30');
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const loadDetail = () =>
+    api<UserDetail>(`/admin/users/${u.id}`).then(setDetail).catch(() => setDetail(null));
+  useEffect(() => { loadDetail(); }, [u.id]);
+
+  const act = async (fn: () => Promise<unknown>, okText: string) => {
+    setBusy(true);
+    setNote(null);
+    try {
+      await fn();
+      setNote({ ok: true, text: okText });
+      loadDetail();
+      onAction(); // обновить список снаружи
+    } catch (e) {
+      setNote({ ok: false, text: e instanceof ApiError ? String(e.detail) : 'Ошибка сети' });
+    }
+    setBusy(false);
+  };
+
+  const grant = (n: number) => act(
+    () => api(`/admin/users/${u.id}/grant`, { method: 'POST', body: JSON.stringify({ days: n }) }),
+    `Подписка выдана на ${n} дн. — пользователю ушло сообщение в бот`,
+  );
+  const cancelSub = () => act(
+    () => api(`/admin/users/${u.id}/cancel-sub`, { method: 'POST' }),
+    'Подписка отменена',
+  );
+  const ban = (banned: boolean) => act(
+    () => api(`/admin/users/${u.id}/ban`, { method: 'POST', body: JSON.stringify({ banned }) }),
+    banned ? 'Пользователь забанен' : 'Пользователь разбанен',
+  );
+  const refund = (subId: number) => act(
+    () => api(`/admin/subscriptions/${subId}/refund`, { method: 'POST' }),
+    'Stars возвращены, подписка отменена',
+  );
+
+  if (detail === undefined)
+    return <div className="vg-skel vg-skel-card" style={{ margin: '4px 16px 12px' }} />;
+  if (detail === null)
+    return <div className="vg-empty">Карточка не загрузилась — попробуйте ещё раз</div>;
+
+  const daysNum = Number(days);
+  const activeSub = detail.subs.find((s) => s.status === 'active');
+
+  return (
+    <div style={{ padding: '4px 16px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div className="vg-card" style={{ cursor: 'default', display: 'block' }}>
+        <div className="vg-card-meta">id {detail.id} · {detail.phone ?? 'без телефона'}</div>
+        <div className="vg-card-meta">
+          рег. {dateRu(detail.created_at)}{ROLE_LABEL[detail.role] ? ` · ${ROLE_LABEL[detail.role]}` : ''}
+        </div>
+        <div className="vg-card-meta">
+          пригласил: {detail.referrer_name
+            ? `${detail.referrer_name}${detail.referrer_username ? ` (@${detail.referrer_username})` : ''}`
+            : '—'} · приглашённых: {detail.invited}
+        </div>
+      </div>
+
+      <div className="vg-h" style={{ margin: '6px 2px 2px' }}>Выдать подписку</div>
+      <div className="vg-chips">
+        {GRANT_PRESETS.map((n) => (
+          <button key={n} className={`vg-chip ${daysNum === n ? 'is-on' : ''}`}
+                  onClick={() => setDays(String(n))}>
+            {n} дн.
+          </button>
+        ))}
+      </div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <Input placeholder="Дней" inputMode="numeric" value={days}
+               onChange={(e) => setDays(e.target.value.replace(/\D/g, ''))} />
+        <Button loading={busy} disabled={busy || daysNum < 1 || daysNum > 365}
+                onClick={() => grant(daysNum)}>
+          Выдать
+        </Button>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {activeSub && (
+          <Button size="s" mode="gray" disabled={busy} onClick={cancelSub}>
+            Отменить подписку (без возврата)
+          </Button>
+        )}
+        {activeSub?.payment_method === 'stars' && (
+          <Button size="s" mode="gray" disabled={busy} onClick={() => refund(activeSub.id)}>
+            Возврат Stars
+          </Button>
+        )}
+        <Button size="s" mode="gray" disabled={busy} onClick={() => ban(!detail.is_banned)}>
+          {detail.is_banned ? 'Разбанить' : 'Бан'}
+        </Button>
+      </div>
+      {note && <div className={`vg-note ${note.ok ? 'is-ok' : 'is-err'}`}>{note.text}</div>}
+
+      <div className="vg-h" style={{ margin: '6px 2px 2px' }}>Подписки</div>
+      {detail.subs.length === 0 ? (
+        <div className="vg-card-meta">Подписок не было</div>
+      ) : detail.subs.map((s) => (
+        <div key={s.id} className="vg-card-meta">
+          {METHOD_LABEL[s.payment_method]} · {s.amount} ₸ · {STATUS_LABEL[s.status]}
+          {s.expires_at ? ` · до ${dateRu(s.expires_at)}` : ''} · {dateRu(s.paid_at ?? s.created_at)}
+        </div>
+      ))}
+
+      <div className="vg-h" style={{ margin: '6px 2px 2px' }}>Визиты</div>
+      {detail.visits.length === 0 ? (
+        <div className="vg-card-meta">Визитов пока нет</div>
+      ) : detail.visits.map((v, i) => (
+        <div key={i} className="vg-card-meta" style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span>{v.name} · {dateRu(v.used_at)}</span>
+          <span className="vg-pct">−{v.discount}%</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export default function Users() {
   // undefined — грузим, null — ошибка сети
   const [data, setData] = useState<UsersResponse | null | undefined>(undefined);
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
-  const [busyId, setBusyId] = useState<number | null>(null);
+  const [open, setOpen] = useState<number | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
   const load = (query = q) =>
@@ -60,22 +229,6 @@ export default function Users() {
     debounceRef.current = setTimeout(() => load(query), 300);
   };
 
-  const ban = async (userId: number, banned: boolean) => {
-    setBusyId(userId);
-    await api(`/admin/users/${userId}/ban`, {
-      method: 'POST', body: JSON.stringify({ banned }),
-    }).catch(() => {});
-    setBusyId(null);
-    load();
-  };
-
-  const refund = async (subId: number, userId: number) => {
-    setBusyId(userId);
-    await api(`/admin/subscriptions/${subId}/refund`, { method: 'POST' }).catch(() => {});
-    setBusyId(null);
-    load();
-  };
-
   // Фильтры — по уже загруженному списку (сервер отдаёт до 200, свежие сверху)
   const shown = (data?.users ?? []).filter((u) =>
     filter === 'subs' ? u.sub_id !== null
@@ -87,10 +240,10 @@ export default function Users() {
   const subtitle = (u: AdminUser) => {
     const parts = [
       u.sub_id && u.expires_at
-        ? `подписка до ${new Date(u.expires_at).toLocaleDateString('ru-RU')}`
+        ? `подписка до ${dateRu(u.expires_at)}`
         : 'без подписки',
       `${u.visits} визит${u.visits % 10 === 1 && u.visits % 100 !== 11 ? '' : u.visits % 10 >= 2 && u.visits % 10 <= 4 && (u.visits % 100 < 10 || u.visits % 100 >= 20) ? 'а' : 'ов'}`,
-      `рег. ${new Date(u.created_at).toLocaleDateString('ru-RU')}`,
+      `рег. ${dateRu(u.created_at)}`,
     ];
     if (ROLE_LABEL[u.role]) parts.push(ROLE_LABEL[u.role]);
     return parts.join(' · ');
@@ -127,28 +280,17 @@ export default function Users() {
             <div key={u.id}>
               <Cell
                 subtitle={subtitle(u)}
+                onClick={() => setOpen(open === u.id ? null : u.id)}
                 after={u.payment_method && (
                   <Badge type="number" mode={u.payment_method === 'stars' ? 'primary' : 'gray'}>
-                    {u.payment_method === 'stars' ? 'Stars' : 'Kaspi'}
+                    {METHOD_LABEL[u.payment_method]}
                   </Badge>
                 )}
               >
                 {u.is_banned ? '(бан) ' : ''}{u.full_name ?? `id ${u.id}`}
                 {u.username ? ` (@${u.username})` : ''}
               </Cell>
-              <div style={{ display: 'flex', gap: 8, padding: '0 16px 12px' }}>
-                <Button size="s" mode="gray" loading={busyId === u.id}
-                        disabled={busyId !== null}
-                        onClick={() => ban(u.id, !u.is_banned)}>
-                  {u.is_banned ? 'Разбанить' : 'Бан'}
-                </Button>
-                {u.sub_id !== null && u.payment_method === 'stars' && (
-                  <Button size="s" mode="gray" disabled={busyId !== null}
-                          onClick={() => refund(u.sub_id!, u.id)}>
-                    Возврат Stars
-                  </Button>
-                )}
-              </div>
+              {open === u.id && <UserCard u={u} onAction={() => load()} />}
             </div>
           ))}
         </Section>

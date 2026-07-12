@@ -60,6 +60,24 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   return res.json();
 }
 
+/** POST multipart (загрузка файла): Content-Type с boundary ставит браузер сам. */
+export async function apiUpload<T>(path: string, form: FormData): Promise<T> {
+  const res = await fetch(`${BASE}/api${path}`, {
+    method: 'POST',
+    headers: { Authorization: `tma ${initDataRaw}` },
+    body: form,
+  });
+  if (!res.ok) {
+    let detail: unknown = res.statusText;
+    try {
+      detail = (await res.json()).detail;
+    } catch { /* не JSON */ }
+    throw new ApiError(res.status, detail);
+  }
+  memCache.clear(); // мутация — как в api()
+  return res.json();
+}
+
 /** GET бинарного ответа (аватар для QR): null — нет фото или нет сети. */
 export async function apiBlob(path: string): Promise<Blob | null> {
   try {

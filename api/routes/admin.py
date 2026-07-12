@@ -1,14 +1,15 @@
-"""Админка в Mini App: чеки, метрики, партнёры (CRUD + QR), подписчики,
-календарь скидки дня, рассылки, бан, возвраты Stars."""
+"""Админка в Mini App: чеки, метрики, партнёры (CRUD + QR + логотип), люди
+(карточка, ручная подписка), календарь скидки дня, рассылки, бан, возвраты Stars."""
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import time
 from typing import Literal
 
 from aiogram import Bot
-from fastapi import APIRouter, Depends, HTTPException, Response
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile
+from pydantic import BaseModel, Field
 
 # Канонические категории каталога (Mini App показывает их чипами в этом порядке).
 # Не подходит ничего — оставляем NULL, витрина покажет «Другое».
@@ -19,7 +20,7 @@ from bot import db
 from bot.config import settings
 from bot.services import broadcast as broadcast_svc
 from bot.services import partners as partners_svc
-from bot.services import payments, qr
+from bot.services import payments, qr, storage
 from bot.texts import t
 
 router = APIRouter(dependencies=[Depends(require_role("admin"))])
@@ -105,7 +106,39 @@ async def stats() -> dict:
              WHERE status = 'used' AND used_at >= now() - interval '30 days') AS visits_month
         """
     )
-    return dict(row)
+    # Разбивки за 30 дней: топ партнёров, визиты и новые подписки по дням.
+    # Дни без событий не заполняем нулями — как в GET /partner/stats.
+    top_partners = await db.fetch(
+        """
+        SELECT p.id, p.name, count(*) AS visits,
+               count(DISTINCT r.user_id) AS unique_visitors
+        FROM redemptions r JOIN partners p ON p.id = r.partner_id
+        WHERE r.status = 'used' AND r.used_at >= now() - interval '30 days'
+        GROUP BY p.id, p.name ORDER BY visits DESC LIMIT 10
+        """
+    )
+    visits_by_day = await db.fetch(
+        """
+        SELECT used_at::date AS day, count(*) AS visits
+        FROM redemptions
+        WHERE status = 'used' AND used_at >= now() - interval '30 days'
+        GROUP BY 1 ORDER BY 1
+        """
+    )
+    subs_by_day = await db.fetch(
+        """
+        SELECT paid_at::date AS day, count(*) AS subs
+        FROM subscriptions
+        WHERE paid_at >= now() - interval '30 days'
+        GROUP BY 1 ORDER BY 1
+        """
+    )
+    return {
+        **dict(row),
+        "top_partners": [dict(r) for r in top_partners],
+        "visits_by_day": [dict(r) for r in visits_by_day],
+        "subs_by_day": [dict(r) for r in subs_by_day],
+    }
 
 
 # --- Партнёры: CRUD + QR ----------------------------------------------------------
@@ -193,6 +226,30 @@ async def partner_qr_png(partner_id: int) -> Response:
     return Response(content=png, media_type="image/png")
 
 
+MAX_LOGO_BYTES = 5 * 1024 * 1024
+
+
+@router.post("/partners/{partner_id}/logo")
+async def partner_logo(partner_id: int, file: UploadFile) -> dict:
+    """Логотип из Mini App (раньше — только фото с /logo в боте).
+
+    Путь в бакете фиксированный (logos/{id}.jpg, upsert) — без cache-buster
+    ?v= браузеры показывали бы старую картинку.
+    """
+    exists = await db.fetchval("SELECT 1 FROM partners WHERE id = $1", partner_id)
+    if not exists:
+        raise HTTPException(404, "partner not found")
+    if not (file.content_type or "").startswith("image/"):
+        raise HTTPException(422, "нужен файл-изображение")
+    data = await file.read()
+    if len(data) > MAX_LOGO_BYTES:
+        raise HTTPException(413, "файл больше 5 МБ")
+    url = await asyncio.to_thread(storage.upload_logo, data, partner_id)  # синхронный SDK
+    url = f"{url}?v={int(time.time())}"
+    await db.execute("UPDATE partners SET logo_url = $2 WHERE id = $1", partner_id, url)
+    return {"logo_url": url}
+
+
 # --- Заявки партнёров на изменение карточки (модерация) ---------------------------
 
 @router.get("/partner-edits")
@@ -258,6 +315,83 @@ async def users_list(q: str | None = None) -> dict:
     )
     total = await db.fetchval(f"SELECT count(*) FROM users u WHERE {_USERS_WHERE}", q)
     return {"total": total, "users": [dict(r) for r in rows]}
+
+
+@router.get("/users/{user_id}")
+async def user_detail(user_id: int) -> dict:
+    """Карточка пользователя: профиль, реферер, визиты, история подписок."""
+    profile = await db.fetchrow(
+        """
+        SELECT u.id, u.full_name, u.username, u.phone, u.role, u.is_banned,
+               u.created_at, ref.full_name AS referrer_name, ref.username AS referrer_username,
+               (SELECT count(*) FROM users WHERE referrer_id = u.id) AS invited
+        FROM users u LEFT JOIN users ref ON ref.id = u.referrer_id
+        WHERE u.id = $1
+        """,
+        user_id,
+    )
+    if profile is None:
+        raise HTTPException(404, "user not found")
+    visits = await db.fetch(
+        """
+        SELECT p.name, r.used_at,
+               coalesce(r.discount,
+                 CASE WHEN r.type = 'premium' THEN p.discount_premium ELSE p.discount_free END) AS discount
+        FROM redemptions r JOIN partners p ON p.id = r.partner_id
+        WHERE r.user_id = $1 AND r.status = 'used'
+        ORDER BY r.used_at DESC LIMIT 20
+        """,
+        user_id,
+    )
+    subs = await db.fetch(
+        """
+        SELECT id, status, payment_method, amount, created_at, paid_at, expires_at
+        FROM subscriptions WHERE user_id = $1
+        ORDER BY created_at DESC LIMIT 20
+        """,
+        user_id,
+    )
+    return {
+        **dict(profile),
+        "visits": [dict(r) for r in visits],
+        "subs": [dict(r) for r in subs],
+    }
+
+
+class GrantBody(BaseModel):
+    days: int = Field(ge=1, le=365)
+
+
+@router.post("/users/{user_id}/grant")
+async def grant_sub(user_id: int, body: GrantBody,
+                    user: dict = Depends(require_role("admin"))) -> dict:
+    """Ручная выдача/продление подписки (наличные, промо, компенсация).
+
+    Реферальный бонус сознательно не начисляется — это не оплата (раздел 3.1).
+    """
+    exists = await db.fetchval("SELECT 1 FROM users WHERE id = $1", user_id)
+    if not exists:
+        raise HTTPException(404, "user not found")
+    sub = await payments.grant_manual(user_id, body.days, user["id"])
+    bot = Bot(token=settings.bot_token)
+    with contextlib.suppress(Exception):
+        await bot.send_message(user_id, t("sub_granted", date=f"{sub['expires_at']:%d.%m.%Y}"))
+    await bot.session.close()
+    return {"ok": True, "expires_at": sub["expires_at"].isoformat()}
+
+
+@router.post("/users/{user_id}/cancel-sub")
+async def cancel_sub(user_id: int,
+                     user: dict = Depends(require_role("admin"))) -> dict:
+    """Отменить активную подписку (любой метод). Stars-возврат — отдельно /refund."""
+    sub = await payments.cancel_active(user_id, user["id"])
+    if sub is None:
+        raise HTTPException(409, "активной подписки нет")
+    bot = Bot(token=settings.bot_token)
+    with contextlib.suppress(Exception):
+        await bot.send_message(user_id, t("sub_cancelled"))
+    await bot.session.close()
+    return {"ok": True}
 
 
 class BanBody(BaseModel):
@@ -337,6 +471,18 @@ async def _send_broadcast(text: str, segment: str) -> None:
         await broadcast_svc.send(bot, text, segment)
     finally:
         await bot.session.close()
+
+
+@router.get("/broadcasts")
+async def broadcasts_history() -> list[dict]:
+    """Последние рассылки: когда, какому сегменту, сколько дошло."""
+    rows = await db.fetch(
+        """
+        SELECT id, text, segment, sent_at, sent_count
+        FROM broadcasts ORDER BY sent_at DESC NULLS LAST LIMIT 20
+        """
+    )
+    return [dict(r) for r in rows]
 
 
 @router.post("/broadcast")

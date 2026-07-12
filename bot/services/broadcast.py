@@ -47,8 +47,9 @@ async def send(bot: Bot, text: str, segment: str = "all") -> int:
                 continue
         await asyncio.sleep(BATCH_PAUSE)
     await db.execute(
-        "INSERT INTO broadcasts (text, sent_at, sent_count) VALUES ($1, now(), $2)",
+        "INSERT INTO broadcasts (text, segment, sent_at, sent_count) VALUES ($1, $2, now(), $3)",
         text,
+        segment,
         sent,
     )
     return sent
