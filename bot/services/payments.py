@@ -157,16 +157,19 @@ async def grant_manual(user_id: int, days: int, admin_id: int) -> dict:
     if row:
         return dict(row)
 
+    # expires_at считаем в Python (как в approve_stars): $2 и в paid_at, и в
+    # "$2 + interval" Postgres не может однозначно типизировать (Ambiguous
+    # ParameterError: interval versus timestamptz)
     row = await db.fetchrow(
         """
         INSERT INTO subscriptions (user_id, status, amount, paid_at, expires_at,
                                    payment_method, confirmed_by)
-        VALUES ($1, 'active', 0, $2, $2 + make_interval(days => $3), 'manual', $4)
+        VALUES ($1, 'active', 0, $2, $3, 'manual', $4)
         RETURNING *
         """,
         user_id,
         now,
-        days,
+        now + timedelta(days=days),
         admin_id,
     )
     return dict(row)
