@@ -23,8 +23,8 @@ class Settings(BaseSettings):
     # Платежи
     kaspi_phone: str = Field(default="", alias="KASPI_PHONE")
     subscription_price: int = Field(default=2000, alias="SUBSCRIPTION_PRICE")
-    # 300 Stars ≈ 3000 ₸ для пользователя, на руки ≈ 2000 ₸ (см. .env.example)
-    subscription_price_stars: int = Field(default=300, alias="SUBSCRIPTION_PRICE_STARS")
+    # 250 Stars ≈ 2600 ₸ для пользователя, на руки ≈ 1700 ₸ (см. .env.example)
+    subscription_price_stars: int = Field(default=250, alias="SUBSCRIPTION_PRICE_STARS")
 
     # Mini App
     miniapp_url: str = Field(default="", alias="MINIAPP_URL")  # https://<app>.vercel.app, без слэша
