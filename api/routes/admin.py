@@ -222,25 +222,42 @@ async def partner_edit_decide(edit_id: int, body: DecideBody,
     return {"ok": True}
 
 
-# --- Люди: подписчики, поиск, бан, возвраты ---------------------------------------
+# --- Люди: все пользователи, поиск, бан, возвраты ---------------------------------
 
-@router.get("/subscribers")
-async def subscribers(q: str | None = None) -> list[dict]:
-    rows = await db.fetch(
-        """
-        SELECT s.id AS sub_id, s.expires_at, s.payment_method,
-               u.id, u.full_name, u.username, u.phone, u.is_banned
-        FROM subscriptions s JOIN users u ON u.id = s.user_id
-        WHERE s.status = 'active' AND s.expires_at > now()
-          AND ($1::text IS NULL
+# Фильтр поиска: имя, @username или телефон
+_USERS_WHERE = """($1::text IS NULL
                OR u.full_name ILIKE '%' || $1 || '%'
                OR u.username ILIKE '%' || $1 || '%'
-               OR u.phone LIKE '%' || $1 || '%')
-        ORDER BY s.expires_at
+               OR u.phone LIKE '%' || $1 || '%')"""
+
+
+@router.get("/users")
+async def users_list(q: str | None = None) -> dict:
+    """Все пользователи, новые сверху; активная подписка и визиты — если есть.
+
+    LIMIT 200 — на масштабе города достаточно, точечно ищут поиском;
+    total показывает настоящий размер базы.
+    """
+    rows = await db.fetch(
+        f"""
+        SELECT u.id, u.full_name, u.username, u.phone, u.role, u.is_banned,
+               u.created_at, s.id AS sub_id, s.expires_at, s.payment_method,
+               (SELECT count(*) FROM redemptions r
+                WHERE r.user_id = u.id AND r.status = 'used') AS visits
+        FROM users u
+        LEFT JOIN LATERAL (
+            SELECT id, expires_at, payment_method FROM subscriptions
+            WHERE user_id = u.id AND status = 'active' AND expires_at > now()
+            ORDER BY expires_at DESC LIMIT 1
+        ) s ON true
+        WHERE {_USERS_WHERE}
+        ORDER BY u.created_at DESC
+        LIMIT 200
         """,
         q,
     )
-    return [dict(r) for r in rows]
+    total = await db.fetchval(f"SELECT count(*) FROM users u WHERE {_USERS_WHERE}", q)
+    return {"total": total, "users": [dict(r) for r in rows]}
 
 
 class BanBody(BaseModel):
