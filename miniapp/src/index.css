@@ -665,6 +665,106 @@ button, input, textarea, select {
   width: 100%;
 }
 
+/* Пины партнёров: логотип в круге + бейдж скидки */
+.vg-pin-wrap {
+  background: none;
+  border: none;
+}
+.vg-pin {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--vg-coal);
+  border: 2.5px solid #fff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--vg-amber);
+  font-family: var(--vg-font-display);
+  font-weight: 700;
+  font-size: 18px;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.vg-pin img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.vg-pin b {
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--vg-grad);
+  color: #fff;
+  font-family: var(--vg-font-display);
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 99px;
+  padding: 2px 7px;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+.vg-pin.is-on {
+  transform: scale(1.18);
+  border-color: var(--vg-amber);
+}
+/* Партнёр дня: расходящийся янтарный пульс */
+@keyframes vg-pin-pulse {
+  0% { transform: scale(0.75); opacity: 0.9; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+.vg-pin.is-deal::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 2.5px solid var(--vg-accent);
+  animation: vg-pin-pulse 1.8s ease-out infinite;
+  pointer-events: none;
+}
+
+/* Нижняя карточка выбранного заведения */
+@keyframes vg-slide-up {
+  from { opacity: 0; transform: translateY(26px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.vg-map-card {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 14px;
+  z-index: 1000;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px;
+  border-radius: var(--vg-radius);
+  background: var(--tgui--bg_color, #fff);
+  color: var(--tgui--text_color, #000);
+  border: 1px solid var(--tgui--outline, rgba(0, 0, 0, 0.08));
+  box-shadow: 0 12px 34px rgba(0, 0, 0, 0.28);
+  animation: vg-slide-up 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.vg-map-card .vg-card-meta { white-space: normal; }
+.vg-map-card-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.vg-map-card-close {
+  border: none;
+  background: none;
+  padding: 2px 4px;
+  font-size: 15px;
+  line-height: 1;
+  color: var(--tgui--hint_color, #8a8a8e);
+  cursor: pointer;
+}
+
 /* Плашка статуса поверх карты: «загружаем точки» / «нет связи» */
 .vg-map-note {
   position: absolute;

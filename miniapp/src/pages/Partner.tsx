@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Placeholder } from '@telegram-apps/telegram-ui';
 import { MapContainer, Marker, TileLayer } from 'react-leaflet';
-import { openLink } from '@telegram-apps/sdk-react';
+import { miniApp, openLink } from '@telegram-apps/sdk-react';
 import { scanPartnerSticker } from './../scan';
 import { api, ApiError, type Partner } from './../api';
 import { ErrorState, useMainButton } from './../hooks';
-import { markerIcon } from './leafletIcon';
+import { markerIcon, TILE_ATTRIBUTION, tileUrl } from './leafletIcon';
 
 type LoadState = Partner | 'loading' | 'notfound' | 'error';
 
@@ -28,6 +28,9 @@ export default function PartnerPage() {
   }, [id, attempt]);
 
   const loaded = typeof partner === 'object' ? partner : null;
+
+  let mapDark = false;
+  try { mapDark = miniApp.isDark(); } catch { /* вне Telegram */ }
 
   const route2gis = () => {
     if (!loaded) return;
@@ -113,8 +116,7 @@ export default function PartnerPage() {
         <div style={{ borderRadius: 'var(--vg-radius)', overflow: 'hidden', marginTop: 2 }}>
           <MapContainer center={[partner.lat, partner.lng]} zoom={16} style={{ height: 190 }}
                         dragging={false} zoomControl={false}>
-            <TileLayer url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-                       attribution="© OpenStreetMap" />
+            <TileLayer url={tileUrl(mapDark)} attribution={TILE_ATTRIBUTION} />
             <Marker position={[partner.lat, partner.lng]} icon={markerIcon} />
           </MapContainer>
         </div>

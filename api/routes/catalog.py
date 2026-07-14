@@ -42,7 +42,7 @@ async def partners_map() -> list[dict]:
     """Пины для карты — только партнёры с координатами."""
     rows = await db.fetch(
         """
-        SELECT id, name, category, address, discount_premium, lat, lng
+        SELECT id, name, category, address, discount_premium, logo_url, lat, lng
         FROM partners
         WHERE is_active AND NOT is_paused AND lat IS NOT NULL AND lng IS NOT NULL
         """
