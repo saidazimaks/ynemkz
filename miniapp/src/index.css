@@ -668,7 +668,7 @@ button, input, textarea, select {
 /* Тёмная тема: Dark Matter почти чёрный — высветляем до графита бренда,
    улицы и подписи читаются, но карта не бьёт белым */
 .vg-tiles-dim .leaflet-tile-pane {
-  filter: brightness(1.75) saturate(1.15);
+  filter: brightness(2.2) saturate(1.15);
 }
 
 /* Пины партнёров: логотип в круге + бейдж скидки */
