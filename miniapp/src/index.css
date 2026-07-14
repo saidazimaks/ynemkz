@@ -687,9 +687,15 @@ button, input, textarea, select {
   font-size: 18px;
   transition: transform 0.15s ease, border-color 0.15s ease;
 }
+/* !important и .leaflet-container — перебиваем правило leaflet.css
+   «.leaflet-marker-pane img { width: auto; max-width: none !important }»,
+   иначе логотип раздувается до натурального размера и круг становится овалом */
+.leaflet-container .vg-pin img,
 .vg-pin img {
-  width: 100%;
-  height: 100%;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
   border-radius: 50%;
   object-fit: cover;
 }
