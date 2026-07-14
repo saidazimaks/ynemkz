@@ -119,6 +119,14 @@ button, input, textarea, select {
 .vg-qr-fab:active { transform: scale(0.92); }
 .vg-qr-fab svg { width: 21px; height: 21px; }
 
+/* Вход кнопки с лёгким перелётом — после появления шапки */
+@keyframes vg-fab-in {
+  from { opacity: 0; transform: scale(0.4); }
+  70% { opacity: 1; transform: scale(1.08); }
+  to { opacity: 1; transform: scale(1); }
+}
+.vg-qr-fab { animation: vg-fab-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) 0.25s backwards; }
+
 .vg-h {
   font-family: var(--vg-font-display);
   font-weight: 700;
@@ -224,7 +232,7 @@ button, input, textarea, select {
   font-weight: 500;
   white-space: nowrap;
   cursor: pointer;
-  transition: transform 0.12s ease;
+  transition: transform 0.12s ease, color 0.18s ease, border-color 0.18s ease;
 }
 .vg-chip:active { transform: scale(0.94); }
 .vg-chip.is-on {
@@ -343,6 +351,35 @@ button, input, textarea, select {
 .vg-skel-card { height: 70px; margin-bottom: 10px; }
 .vg-skel-line { height: 14px; width: 60%; border-radius: 6px; }
 
+/* --- Общие анимации появления ---------------------------------- */
+
+/* «Выстрел» с лёгким перелётом — для главных акцентов (процент, QR) */
+@keyframes vg-pop {
+  0% { opacity: 0; transform: scale(0.5); }
+  65% { opacity: 1; transform: scale(1.06); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* Плавное появление результатов действий под формами */
+.vg-note {
+  animation: vg-rise 0.3s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+/* Раскрывающиеся блоки (редактор партнёра, карточка пользователя) */
+.vg-expand {
+  animation: vg-rise 0.35s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+
+/* Доступность: системная настройка «уменьшить движение» глушит декоративные
+   анимации; анти-фрод активации не страдает — часы тикают из JS */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* --- Экран активации ------------------------------------------ */
 
 @keyframes vg-ring-spin {
@@ -387,6 +424,15 @@ button, input, textarea, select {
 
 .vg-act > * { position: relative; }
 
+/* Каскадное появление экрана: настроение «скидка получена», а не «страница загрузилась» */
+.vg-act > * { animation: vg-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+.vg-act > *:nth-child(1) { animation-delay: 0.05s; }
+.vg-act > *:nth-child(2) { animation-delay: 0.12s; }
+.vg-act > *:nth-child(3) { animation-delay: 0.19s; }
+.vg-act > *:nth-child(4) { animation-delay: 0.26s; }
+.vg-act > *:nth-child(5) { animation-delay: 0.33s; }
+.vg-act > *:nth-child(n + 6) { animation-delay: 0.4s; }
+
 .vg-act-partner {
   font-family: var(--vg-font-display);
   font-weight: 700;
@@ -404,6 +450,8 @@ button, input, textarea, select {
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
+  /* Главный акцент влетает с перелётом — перебивает каскадный vg-rise */
+  animation: vg-pop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) 0.16s backwards;
 }
 
 .vg-act-kind {
@@ -496,6 +544,16 @@ button, input, textarea, select {
     radial-gradient(130% 90% at 50% -12%, rgba(255, 138, 30, 0.32), transparent 58%),
     radial-gradient(100% 70% at 50% 118%, rgba(255, 94, 43, 0.2), transparent 60%),
     var(--vg-coal);
+}
+
+/* Каскад появления QR-экрана; сама карточка — с «выстрелом» */
+.vg-qr > * { animation: vg-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards; }
+.vg-qr > *:nth-child(1) { animation-delay: 0.04s; }
+.vg-qr > *:nth-child(2) { animation-delay: 0.1s; }
+.vg-qr > *:nth-child(3) { animation-delay: 0.16s; }
+.vg-qr > *:nth-child(n + 4) { animation-delay: 0.3s; }
+.vg-qr .vg-qr-frame {
+  animation: vg-pop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) 0.14s backwards;
 }
 
 .vg-qr-badge {

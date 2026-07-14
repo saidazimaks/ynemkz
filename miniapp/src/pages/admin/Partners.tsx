@@ -140,7 +140,8 @@ function Editor({ p, onSaved }: { p: AdminPartner; onSaved: () => void }) {
     setForm({ ...form, [k]: e.target.value });
 
   return (
-    <div style={{ padding: '4px 16px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div className="vg-expand"
+         style={{ padding: '4px 16px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div>
         <div className="vg-h" style={{ margin: '2px 2px 8px' }}>Категория</div>
         <div className="vg-chips">

@@ -134,7 +134,8 @@ function UserCard({ u, onAction }: { u: AdminUser; onAction: () => void }) {
   const activeSub = detail.subs.find((s) => s.status === 'active');
 
   return (
-    <div style={{ padding: '4px 16px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div className="vg-expand"
+         style={{ padding: '4px 16px 16px', display: 'flex', flexDirection: 'column', gap: 8 }}>
       <div className="vg-card" style={{ cursor: 'default', display: 'block' }}>
         <div className="vg-card-meta">id {detail.id} · {detail.phone ?? 'без телефона'}</div>
         <div className="vg-card-meta">

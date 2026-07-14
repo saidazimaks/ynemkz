@@ -4,6 +4,7 @@ import { Button, Placeholder } from '@telegram-apps/telegram-ui';
 import { openTelegramLink } from '@telegram-apps/sdk-react';
 import QRCodeStyling from 'qr-code-styling';
 import { apiBlob, type Me } from './../api';
+import { scanPartnerSticker } from './../scan';
 
 const BOT = import.meta.env.VITE_BOT_USERNAME as string | undefined;
 
@@ -63,6 +64,18 @@ export default function MyQr({ me }: { me: Me | null | undefined }) {
   const boxRef = useRef<HTMLDivElement>(null);
   // undefined — аватар грузится (QR ждём, чтобы не перерисовывать), null — фото нет
   const [avatar, setAvatar] = useState<string | null | undefined>(undefined);
+  const [scanNote, setScanNote] = useState<string | null>(null);
+
+  const scanSticker = async () => {
+    // Второй путь к скидке, не выходя с экрана QR: клиент сам сканирует наклейку
+    setScanNote(null);
+    try {
+      const opened = await scanPartnerSticker(navigate);
+      if (!opened) setScanNote('Сканер здесь недоступен — наведите обычную камеру телефона на QR');
+    } catch {
+      setScanNote('Не удалось открыть сканер — наведите обычную камеру телефона на QR');
+    }
+  };
 
   const premium = !!me?.subscription.active;
 
@@ -146,9 +159,16 @@ export default function MyQr({ me }: { me: Me | null | undefined }) {
           ? 'Покажите QR кассиру — он отсканирует, и скидка запишется сразу.'
           : 'Без подписки QR действует только у партнёра дня. Подписка откроет скидки 10–15% у всех.'}
       </div>
-      {!premium && (
-        <Button size="m" onClick={() => navigate('/profile')}>Оформить подписку</Button>
-      )}
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%', maxWidth: 320 }}>
+        <Button size="m" mode="white" onClick={() => void scanSticker()}>
+          Сканировать QR на кассе
+        </Button>
+        {!premium && (
+          <Button size="m" onClick={() => navigate('/profile')}>Оформить подписку</Button>
+        )}
+      </div>
+      {scanNote && <div className="vg-note is-err">{scanNote}</div>}
     </div>
   );
 }

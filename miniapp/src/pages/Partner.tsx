@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Placeholder } from '@telegram-apps/telegram-ui';
 import { MapContainer, Marker, TileLayer } from 'react-leaflet';
-import { openLink, qrScanner } from '@telegram-apps/sdk-react';
+import { openLink } from '@telegram-apps/sdk-react';
+import { scanPartnerSticker } from './../scan';
 import { api, ApiError, type Partner } from './../api';
 import { ErrorState, useMainButton } from './../hooks';
 import { markerIcon } from './leafletIcon';
@@ -40,20 +41,11 @@ export default function PartnerPage() {
   useMainButton('Маршрут в 2GIS', route2gis, { visible: !!loaded });
 
   const scanSticker = async () => {
-    // Сканер наклейки, не выходя из приложения. Ловим только партнёрские
-    // deep link'и (=p_<id>): активируется то заведение, чей QR отсканирован.
+    // Сканер наклейки, не выходя из приложения (общий хелпер scan.ts)
     setScanNote(null);
     try {
-      if (!qrScanner.open.isAvailable()) {
-        setScanNote('Сканер здесь недоступен — наведите обычную камеру телефона на QR');
-        return;
-      }
-      const content = await qrScanner.open({
-        text: 'Наведите на QR-наклейку на кассе',
-        capture: (q) => /(?:startapp|start)=p_(\d+)/.test(q),
-      });
-      const m = content ? /(?:startapp|start)=p_(\d+)/.exec(content) : null;
-      if (m) navigate(`/activate/${m[1]}`);
+      const opened = await scanPartnerSticker(navigate);
+      if (!opened) setScanNote('Сканер здесь недоступен — наведите обычную камеру телефона на QR');
     } catch {
       setScanNote('Не удалось открыть сканер — наведите обычную камеру телефона на QR');
     }
