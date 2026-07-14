@@ -40,7 +40,7 @@ function LeafletMap({ points, dealId, selected, onSelect }: {
 
   return (
     <MapContainer center={EKIBASTUZ} zoom={13} maxZoom={19} zoomControl={false}
-                  style={{ height: '100%' }}>
+                  className={dark ? 'vg-tiles-dim' : ''} style={{ height: '100%' }}>
       <TileLayer url={tileUrl(dark)} attribution={TILE_ATTRIBUTION} />
       <ClickCatcher onClick={() => onSelect(null)} />
       {points.map((p) => (

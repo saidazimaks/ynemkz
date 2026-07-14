@@ -115,6 +115,7 @@ export default function PartnerPage() {
       {partner.lat && partner.lng && (
         <div style={{ borderRadius: 'var(--vg-radius)', overflow: 'hidden', marginTop: 2 }}>
           <MapContainer center={[partner.lat, partner.lng]} zoom={16} style={{ height: 190 }}
+                        className={mapDark ? 'vg-tiles-dim' : ''}
                         dragging={false} zoomControl={false}>
             <TileLayer url={tileUrl(mapDark)} attribution={TILE_ATTRIBUTION} />
             <Marker position={[partner.lat, partner.lng]} icon={markerIcon} />
